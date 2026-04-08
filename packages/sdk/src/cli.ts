@@ -3,11 +3,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import type { SupportedProvider } from "@apex-value/schema-gateway-core";
+import type { SchemaPortabilityTarget, SupportedProvider } from "@apex-value/schema-gateway-core";
 
 import { buildPurchaseMetadata, SchemaGatewayClient } from "./index.js";
 
-type Command = "validate" | "redeem" | "commitment";
+type Command = "validate" | "redeem" | "commitment" | "lint" | "claim";
 
 interface CliOptions {
   [key: string]: string | boolean | undefined;
@@ -18,6 +18,9 @@ function usage(): string {
     "Usage:",
     "  schema-gateway validate --schema ./schema.json --payload ./payload.json [--provider openai]",
     "  schema-gateway validate --schema ./schema.json --payload ./payload.txt --remote --api-key sk_live... [--base-url https://worker.example]",
+    "  schema-gateway lint --schema ./schema.json [--target openai,gemini]",
+    "  schema-gateway lint --schema ./schema.json --remote --api-key sk_live... [--base-url https://worker.example]",
+    "  schema-gateway claim --order-id polar_order... --email you@example.com [--base-url https://worker.example]",
     "  schema-gateway redeem --tx-hash 0x... --label router-service [--base-url https://worker.example]",
     "  schema-gateway commitment --label router-service",
     "",
@@ -28,6 +31,9 @@ function usage(): string {
     "  --remote     Call the paid API instead of local normalization",
     "  --api-key    API key for remote normalization",
     "  --base-url   Worker base URL",
+    "  --target     Comma-separated portability targets: openai, gemini, anthropic, ollama",
+    "  --order-id   Polar order ID for access claiming",
+    "  --email      Buyer email for Polar access claiming",
     "  --tx-hash    Purchase transaction hash for key redemption",
     "  --label      Human-readable service label used to derive the key commitment"
   ].join("\n");
@@ -54,7 +60,13 @@ function parseArgs(argv: string[]): { command: Command | null; options: CliOptio
     index += 1;
   }
 
-  if (commandToken === "validate" || commandToken === "redeem" || commandToken === "commitment") {
+  if (
+    commandToken === "validate" ||
+    commandToken === "redeem" ||
+    commandToken === "commitment" ||
+    commandToken === "lint" ||
+    commandToken === "claim"
+  ) {
     return { command: commandToken, options };
   }
 
@@ -117,6 +129,50 @@ async function runValidate(options: CliOptions): Promise<void> {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
+function parseTargets(raw: string | boolean | undefined): SchemaPortabilityTarget[] | undefined {
+  if (typeof raw !== "string" || raw.trim() === "") {
+    return undefined;
+  }
+
+  const targets = raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry): entry is SchemaPortabilityTarget =>
+      ["openai", "gemini", "anthropic", "ollama"].includes(entry)
+    );
+
+  return targets.length > 0 ? targets : undefined;
+}
+
+async function runLint(options: CliOptions): Promise<void> {
+  const schemaPath = options.schema;
+
+  if (typeof schemaPath !== "string") {
+    throw new Error("`lint` requires --schema.");
+  }
+
+  const schemaRaw = await readFileOrStdin(schemaPath);
+  const schema = JSON.parse(schemaRaw) as Record<string, unknown>;
+  const targets = parseTargets(options.target);
+
+  const client = new SchemaGatewayClient({
+    ...(typeof options["api-key"] === "string" ? { apiKey: options["api-key"] } : {}),
+    ...(typeof options["base-url"] === "string" ? { baseUrl: options["base-url"] } : {})
+  });
+
+  const result = options.remote
+    ? await client.lintRemote({
+        schema,
+        ...(targets ? { targets } : {})
+      })
+    : await client.lintLocal({
+        schema,
+        ...(targets ? { targets } : {})
+      });
+
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
 async function runRedeem(options: CliOptions): Promise<void> {
   const txHash = options["tx-hash"];
   const label = options.label;
@@ -130,6 +186,22 @@ async function runRedeem(options: CliOptions): Promise<void> {
   });
 
   const result = await client.redeemCredits({ txHash: txHash as `0x${string}`, label });
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
+async function runClaim(options: CliOptions): Promise<void> {
+  const orderId = options["order-id"];
+  const email = options.email;
+
+  if (typeof orderId !== "string" || typeof email !== "string") {
+    throw new Error("`claim` requires both --order-id and --email.");
+  }
+
+  const client = new SchemaGatewayClient({
+    ...(typeof options["base-url"] === "string" ? { baseUrl: options["base-url"] } : {})
+  });
+
+  const result = await client.claimPolarAccess({ orderId, email });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
@@ -161,6 +233,12 @@ async function main(): Promise<void> {
       break;
     case "commitment":
       await runCommitment(options);
+      break;
+    case "lint":
+      await runLint(options);
+      break;
+    case "claim":
+      await runClaim(options);
       break;
   }
 }

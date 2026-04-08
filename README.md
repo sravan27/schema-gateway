@@ -3,6 +3,7 @@
 `Schema Gateway` is a machine-to-machine API for one of the loudest integration failures in current AI stacks: provider-specific structured output drift. The codebase includes:
 
 - a free SDK for local schema validation and tool-call normalization
+- a schema portability linter that rewrites one schema into provider-safe variants
 - a Cloudflare Worker for paid, signed normalization responses
 - a Solidity paywall contract that accepts native or ERC-20 payments and emits receipts the Worker can redeem into API keys
 - a Polar billing path for legal fiat checkout and API-key provisioning
@@ -31,7 +32,7 @@ The Worker exposes a machine-readable spec at `/openapi.json`, and the root path
 
 The project now supports two paid access paths:
 
-- `Polar`: legal fiat checkout for customers, with a webhook that provisions a claimable API key after `order.paid`
+- `Polar`: legal fiat checkout for customers, with either a stateless signed access pass claimed directly from a paid order or a webhook-backed claim flow when KV is available
 - `On-chain paywall`: deterministic smart-contract purchase receipts for crypto-native access
 
 ## Local usage
@@ -62,12 +63,26 @@ Or use the CLI:
 ```bash
 schema-gateway validate --schema ./schema.json --payload ./payload.json
 schema-gateway commitment --label router-service
+schema-gateway lint --schema ./schema.json --target openai,gemini
 ```
 
 Provider-specific examples live in:
 
 - `/Users/sravansridhar/Documents/auto-money/examples/openai-responses.ts`
 - `/Users/sravansridhar/Documents/auto-money/examples/langchain-ollama.ts`
+- `/Users/sravansridhar/Documents/auto-money/examples/schema-portability.ts`
+
+To audit one schema across providers before you ship it:
+
+```ts
+import { SchemaGatewayClient } from "@apex-value/schema-gateway";
+
+const client = new SchemaGatewayClient();
+const report = await client.lintLocal({
+  schema,
+  targets: ["openai", "gemini", "anthropic", "ollama"]
+});
+```
 
 When you need signed responses and prepaid credits, generate the same label commitment locally, buy credits on-chain with that commitment, then redeem the resulting transaction for a key:
 
@@ -83,7 +98,7 @@ const access = await gateway.redeemCredits({
 });
 ```
 
-For the fiat billing path, configure `POLAR_WEBHOOK_SECRET` and point Polar webhooks at `/v1/webhooks/polar`. After checkout, a customer can claim their issued API key with:
+For the shortest fiat launch path, configure `POLAR_ACCESS_TOKEN` and let customers claim a signed access key directly from a paid Polar order:
 
 ```bash
 curl -X POST https://your-worker.example/v1/access/polar/claim \
@@ -91,7 +106,18 @@ curl -X POST https://your-worker.example/v1/access/polar/claim \
   -d '{"orderId":"<polar-order-id>","email":"customer@example.com"}'
 ```
 
+If you prefer durable prepaid credits instead, configure `POLAR_WEBHOOK_SECRET`, bind Cloudflare KV, and point Polar webhooks at `/v1/webhooks/polar`.
+
 For the shortest launch path, see [docs/revenue-playbook.md](/Users/sravansridhar/Documents/auto-money/docs/revenue-playbook.md).
+
+Paid users can also request a signed schema portability report:
+
+```bash
+curl -X POST https://your-worker.example/v1/lint \
+  -H 'content-type: application/json' \
+  -H 'x-api-key: sk_live...' \
+  -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}},"required":[]}}'
+```
 
 Run the Worker locally:
 
@@ -100,7 +126,10 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-For local development, `.dev.vars.example` enables `ALLOW_EPHEMERAL_STORAGE=true` so you can test without Cloudflare KV. For any paid deployment, bind `API_KEYS`, `POLAR_CLAIMS`, and `REDEMPTIONS` KV namespaces and leave ephemeral storage disabled.
+For local development, `.dev.vars.example` enables `ALLOW_EPHEMERAL_STORAGE=true` so you can test without Cloudflare KV. For production, you can either:
+
+- use the stateless Polar launch path with `POLAR_ACCESS_TOKEN`, which does not require KV for the fiat path
+- bind `API_KEYS`, `POLAR_CLAIMS`, and `REDEMPTIONS` KV namespaces for durable prepaid credit flows
 
 Compile the contract:
 

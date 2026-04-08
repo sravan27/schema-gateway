@@ -1,5 +1,8 @@
 import {
   buildLabelCommitment,
+  lintStructuredOutputSchema,
+  type LintSchemaRequest,
+  type SchemaPortabilityReport,
   normalizeStructuredOutput,
   type NormalizeRequest,
   type NormalizationResult,
@@ -26,6 +29,31 @@ export interface RedeemResponse {
   label: string;
 }
 
+export interface PolarClaimRequest {
+  orderId: string;
+  email: string;
+}
+
+export interface PolarClaimResponse {
+  apiKey: string;
+  orderId: string;
+  email: string;
+  issuedAt?: string;
+  expiresAt?: string;
+  productId?: string;
+  productName?: string;
+  accessMode?: string;
+  keyId?: string;
+  credits?: number;
+}
+
+export interface RemoteLintResponse extends SchemaPortabilityReport {
+  remainingCredits: number | null;
+  signature: `0x${string}`;
+  accessMode?: string;
+  expiresAt?: string;
+}
+
 export class SchemaGatewayClient {
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
@@ -41,9 +69,15 @@ export class SchemaGatewayClient {
     return normalizeStructuredOutput(request);
   }
 
+  lintLocal(request: LintSchemaRequest): Promise<SchemaPortabilityReport> {
+    return lintStructuredOutputSchema(request);
+  }
+
   async normalizeRemote(request: NormalizeRequest): Promise<NormalizationResult & {
-    remainingCredits: number;
+    remainingCredits: number | null;
     signature: `0x${string}`;
+    accessMode?: string;
+    expiresAt?: string;
   }> {
     const apiKey = this.apiKey;
     if (!apiKey) {
@@ -65,8 +99,10 @@ export class SchemaGatewayClient {
       }
 
       return (await response.json()) as NormalizationResult & {
-        remainingCredits: number;
+        remainingCredits: number | null;
         signature: `0x${string}`;
+        accessMode?: string;
+        expiresAt?: string;
       };
     });
   }
@@ -86,6 +122,50 @@ export class SchemaGatewayClient {
       }
 
       return (await response.json()) as RedeemResponse;
+    });
+  }
+
+  async claimPolarAccess(request: PolarClaimRequest): Promise<PolarClaimResponse> {
+    return withRetry(async () => {
+      const response = await this.fetchImpl(`${this.baseUrl}/v1/access/polar/claim`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Schema Gateway returned ${response.status} for /v1/access/polar/claim.`
+        );
+      }
+
+      return (await response.json()) as PolarClaimResponse;
+    });
+  }
+
+  async lintRemote(request: LintSchemaRequest): Promise<RemoteLintResponse> {
+    const apiKey = this.apiKey;
+    if (!apiKey) {
+      throw new Error("An API key is required for remote schema linting.");
+    }
+
+    return withRetry(async () => {
+      const response = await this.fetchImpl(`${this.baseUrl}/v1/lint`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Schema Gateway returned ${response.status} for /v1/lint.`);
+      }
+
+      return (await response.json()) as RemoteLintResponse;
     });
   }
 }

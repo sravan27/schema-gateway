@@ -4,3 +4,7 @@ compatibility_date = "2026-04-08"
 
 [vars]
 ACCESS_TTL_SECONDS = "86400"
+CHECKOUT_URL = "https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK"
+POLAR_ACCESS_TTL_SECONDS = "2592000"
+POLAR_PRODUCT_ID = "01c2b75a-71d9-4869-a01e-18c7db8da69f"
+PUBLIC_CONTACT_EMAIL = "sridharsravan@icloud.com"

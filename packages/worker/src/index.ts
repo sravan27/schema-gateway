@@ -2,16 +2,18 @@ import {
   buildLabelCommitment,
   constantTimeEqual,
   createSignedEnvelope,
+  lintStructuredOutputSchema,
   normalizeStructuredOutput,
   purchaseEventAbiItem,
   randomToken,
   sha256Hex,
   withRetry,
   type ApiKeyRecord,
-  type PurchaseEventPayload
+  type PurchaseEventPayload,
+  type SchemaPortabilityTarget
 } from "@apex-value/schema-gateway-core";
 import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { decodeEventLog } from "viem";
 import { ZodError, z } from "zod";
 
@@ -25,6 +27,8 @@ type Bindings = {
   CONTRACT_ADDRESS?: string;
   ISSUER_SECRET: string;
   POLAR_CLAIMS?: KVNamespace;
+  POLAR_ACCESS_TOKEN?: string;
+  POLAR_ACCESS_TTL_SECONDS?: string;
   POLAR_PRODUCT_ID?: string;
   POLAR_WEBHOOK_SECRET?: string;
   PUBLIC_CONTACT_EMAIL?: string;
@@ -33,6 +37,7 @@ type Bindings = {
 };
 
 type Variables = {
+  accessPayload?: StatelessAccessPayload;
   keyId: string;
   keyRecord: ApiKeyRecord;
 };
@@ -45,6 +50,11 @@ const NormalizeBodySchema = z.object({
   schema: z.record(z.string(), z.unknown()),
   payload: z.unknown(),
   provider: z.enum(["generic", "openai", "langchain", "ollama"]).optional()
+});
+
+const LintBodySchema = z.object({
+  schema: z.record(z.string(), z.unknown()),
+  targets: z.array(z.enum(["openai", "gemini", "anthropic", "ollama"])).optional()
 });
 
 const RedeemBodySchema = z.object({
@@ -89,6 +99,25 @@ interface PolarClaimRecord {
   productName?: string;
 }
 
+interface PolarOrderRecord {
+  id: string;
+  productId?: string;
+  productName?: string;
+  customerEmail?: string;
+  billingName?: string;
+  status?: string;
+}
+
+interface StatelessAccessPayload {
+  type: "polar_access";
+  orderId: string;
+  email: string;
+  issuedAt: string;
+  expiresAt: string;
+  productId?: string;
+  productName?: string;
+}
+
 type StorageBindingName = "API_KEYS" | "POLAR_CLAIMS" | "REDEMPTIONS";
 
 class StorageConfigurationError extends Error {
@@ -104,6 +133,11 @@ class StorageConfigurationError extends Error {
 function getTtlSeconds(env: Bindings): number {
   const parsed = Number.parseInt(env.ACCESS_TTL_SECONDS ?? "86400", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 86400;
+}
+
+function getPolarAccessTtlSeconds(env: Bindings): number {
+  const parsed = Number.parseInt(env.POLAR_ACCESS_TTL_SECONDS ?? "2592000", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 2592000;
 }
 
 function allowsEphemeralStorage(env: Bindings): boolean {
@@ -137,6 +171,20 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function base64UrlEncode(value: string): string {
+  return Buffer.from(value, "utf8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value: string): string {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
+  return Buffer.from(`${normalized}${padding}`, "base64").toString("utf8");
 }
 
 function renderLandingPage(context: {
@@ -256,8 +304,9 @@ function renderLandingPage(context: {
         <h1>Schema Gateway Pro</h1>
         <p>
           Schema Gateway is a developer API that normalizes and validates structured LLM outputs
-          and tool-call payloads across providers. Teams use it to reduce provider drift, sign
-          normalized responses, and gate production traffic behind prepaid credits.
+          and tool-call payloads across providers. Teams use it to reduce provider drift, lint
+          one schema against multiple vendors, sign normalized responses, and gate production
+          traffic behind paid access keys.
         </p>
         <div class="actions">
           ${checkoutMarkup}
@@ -285,8 +334,8 @@ function renderLandingPage(context: {
           <article class="card">
             <strong>Upgrade path</strong>
             <p class="meta">
-              Start with the open-source SDK, then move to signed responses and prepaid credits
-              when you need shared production access.
+              Start with the open-source SDK, then move to signed responses, portability linting,
+              and paid shared access when you need production enforcement.
             </p>
           </article>
         </div>
@@ -359,6 +408,10 @@ function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
 
+function isStatelessPolarMode(env: Bindings): boolean {
+  return typeof env.POLAR_ACCESS_TOKEN === "string" && env.POLAR_ACCESS_TOKEN.length > 0;
+}
+
 function extractApiKey(rawHeaderValue: string | undefined): string | null {
   if (!rawHeaderValue) {
     return null;
@@ -369,6 +422,142 @@ function extractApiKey(rawHeaderValue: string | undefined): string | null {
   }
 
   return rawHeaderValue.trim();
+}
+
+async function fetchPolarOrder(env: Bindings, orderId: string): Promise<PolarOrderRecord | null> {
+  if (!env.POLAR_ACCESS_TOKEN) {
+    throw new Error("POLAR_ACCESS_TOKEN is not configured.");
+  }
+
+  const response = await withRetry(async () => {
+    const result = await fetch(`https://api.polar.sh/v1/orders/${orderId}`, {
+      headers: {
+        Authorization: `Bearer ${env.POLAR_ACCESS_TOKEN}`
+      }
+    });
+
+    if (!result.ok) {
+      if (result.status === 404) {
+        return result;
+      }
+
+      throw new Error(`Polar returned ${result.status} while loading order ${orderId}.`);
+    }
+
+    return result;
+  });
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  const payload = (await response.json()) as {
+    id?: string;
+    status?: string;
+    product_id?: string | null;
+    customer?: {
+      email?: string | null;
+      name?: string | null;
+    } | null;
+    product?: {
+      id?: string | null;
+      name?: string | null;
+    } | null;
+    billing_name?: string | null;
+  };
+
+  if (!payload.id) {
+    throw new Error("Polar order lookup returned an invalid payload.");
+  }
+
+  const productId = payload.product_id ?? payload.product?.id ?? null;
+  const billingName = payload.billing_name ?? payload.customer?.name ?? null;
+
+  return {
+    id: payload.id,
+    ...(payload.status ? { status: payload.status } : {}),
+    ...(productId ? { productId } : {}),
+    ...(payload.product?.name ? { productName: payload.product.name } : {}),
+    ...(payload.customer?.email ? { customerEmail: payload.customer.email } : {}),
+    ...(billingName ? { billingName } : {})
+  };
+}
+
+async function issueStatelessPolarAccessKey(
+  env: Bindings,
+  order: PolarOrderRecord,
+  email: string
+): Promise<{
+  apiKey: string;
+  orderId: string;
+  email: string;
+  issuedAt: string;
+  expiresAt: string;
+  productId?: string;
+  productName?: string;
+}> {
+  const issuedAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + getPolarAccessTtlSeconds(env) * 1000).toISOString();
+  const payload: StatelessAccessPayload = {
+    type: "polar_access",
+    orderId: order.id,
+    email: normalizeEmail(email),
+    issuedAt,
+    expiresAt,
+    ...(order.productId ? { productId: order.productId } : {}),
+    ...(order.productName ? { productName: order.productName } : {})
+  };
+  const tokenPayload = base64UrlEncode(JSON.stringify(payload));
+  const signature = await createSignedEnvelope(env.ISSUER_SECRET, payload);
+  const apiKey = `sk_live.access.${tokenPayload}.${signature.slice(2)}`;
+
+  return {
+    apiKey,
+    orderId: order.id,
+    email: payload.email,
+    issuedAt,
+    expiresAt,
+    ...(order.productId ? { productId: order.productId } : {}),
+    ...(order.productName ? { productName: order.productName } : {})
+  };
+}
+
+async function verifyStatelessPolarAccessKey(
+  env: Bindings,
+  providedKey: string
+): Promise<StatelessAccessPayload | null> {
+  const parts = providedKey.split(".");
+  if (parts.length !== 4 || parts[0] !== "sk_live" || parts[1] !== "access") {
+    return null;
+  }
+
+  const payloadToken = parts[2];
+  const signatureToken = parts[3];
+  if (!payloadToken || !signatureToken) {
+    return null;
+  }
+
+  let payload: StatelessAccessPayload;
+  try {
+    payload = JSON.parse(base64UrlDecode(payloadToken)) as StatelessAccessPayload;
+  } catch {
+    return null;
+  }
+
+  if (payload.type !== "polar_access" || !payload.orderId || !payload.email || !payload.expiresAt) {
+    return null;
+  }
+
+  const expectedSignature = await createSignedEnvelope(env.ISSUER_SECRET, payload);
+  if (!constantTimeEqual(expectedSignature.slice(2), signatureToken)) {
+    return null;
+  }
+
+  if (Number.isNaN(Date.parse(payload.expiresAt)) || Date.parse(payload.expiresAt) <= Date.now()) {
+    throw new Error("This access key has expired. Re-claim access from your Polar order.");
+  }
+
+  return payload;
 }
 
 async function issueApiKey(
@@ -460,6 +649,24 @@ async function issuePolarClaim(
 
   await writePolarClaim(env, claim);
   return claim;
+}
+
+async function spendCredit(env: Bindings, record: ApiKeyRecord): Promise<ApiKeyRecord> {
+  if (record.keyId.startsWith("polar:")) {
+    return {
+      ...record,
+      lastUsedAt: new Date().toISOString()
+    };
+  }
+
+  const updatedRecord: ApiKeyRecord = {
+    ...record,
+    credits: record.credits - 1,
+    lastUsedAt: new Date().toISOString()
+  };
+
+  await writeKeyRecord(env, updatedRecord);
+  return updatedRecord;
 }
 
 async function loadPurchaseEvent(
@@ -610,6 +817,17 @@ app.get("/openapi.json", (context) => {
 });
 
 app.post("/v1/webhooks/polar", async (context) => {
+  if (isStatelessPolarMode(context.env) && !context.env.POLAR_WEBHOOK_SECRET) {
+    return context.json(
+      {
+        ok: true,
+        ignored: true,
+        mode: "stateless-polar-claim"
+      },
+      202
+    );
+  }
+
   assertPersistentStorage(context.env, ["API_KEYS", "POLAR_CLAIMS", "REDEMPTIONS"]);
 
   const webhookSecret = context.env.POLAR_WEBHOOK_SECRET;
@@ -729,8 +947,56 @@ app.post("/v1/access/redeem", async (context) => {
 });
 
 app.post("/v1/access/polar/claim", async (context) => {
-  assertPersistentStorage(context.env, ["POLAR_CLAIMS"]);
   const body = PolarClaimBodySchema.parse(await context.req.json());
+
+  if (isStatelessPolarMode(context.env)) {
+    const order = await fetchPolarOrder(context.env, body.orderId);
+    if (!order) {
+      return context.json(
+        {
+          error: "No Polar order was found for that order ID."
+        },
+        404
+      );
+    }
+
+    const expectedEmail = order.customerEmail ? normalizeEmail(order.customerEmail) : null;
+    if (!expectedEmail || expectedEmail !== normalizeEmail(body.email)) {
+      return context.json(
+        {
+          error: "The email does not match the paid Polar order."
+        },
+        403
+      );
+    }
+
+    if (order.status && !["paid", "confirmed", "succeeded"].includes(order.status.toLowerCase())) {
+      return context.json(
+        {
+          error: `Polar order ${body.orderId} is not in a paid state.`
+        },
+        409
+      );
+    }
+
+    const requiredProductId = context.env.POLAR_PRODUCT_ID;
+    if (requiredProductId && order.productId && order.productId !== requiredProductId) {
+      return context.json(
+        {
+          error: "That order does not match the configured product."
+        },
+        403
+      );
+    }
+
+    const access = await issueStatelessPolarAccessKey(context.env, order, body.email);
+    return context.json({
+      ...access,
+      accessMode: "stateless"
+    });
+  }
+
+  assertPersistentStorage(context.env, ["POLAR_CLAIMS"]);
   const claim = await readPolarClaim(context.env, body.orderId);
 
   if (!claim) {
@@ -763,8 +1029,10 @@ app.post("/v1/access/polar/claim", async (context) => {
   });
 });
 
-app.use("/v1/normalize", async (context, next) => {
-  assertPersistentStorage(context.env, ["API_KEYS"]);
+const requireApiKey: MiddlewareHandler<{ Bindings: Bindings; Variables: Variables }> = async (
+  context,
+  next
+) => {
   const providedKey =
     extractApiKey(context.req.header("x-api-key")) ??
     extractApiKey(context.req.header("authorization"));
@@ -778,8 +1046,37 @@ app.use("/v1/normalize", async (context, next) => {
     );
   }
 
-  const [prefix, keyId] = providedKey.split(".");
-  if (prefix !== "sk_live" || !keyId) {
+  if (!providedKey.startsWith("sk_live.")) {
+    return context.json(
+      {
+        error: "The API key format is invalid."
+      },
+      401
+    );
+  }
+
+  const statelessPayload = await verifyStatelessPolarAccessKey(context.env, providedKey);
+  if (statelessPayload) {
+    context.set("accessPayload", statelessPayload);
+    context.set("keyId", `polar:${statelessPayload.orderId}`);
+    context.set("keyRecord", {
+      keyId: `polar:${statelessPayload.orderId}`,
+      label: statelessPayload.productName ?? "Polar access",
+      hashedKey: await sha256Hex(providedKey),
+      credits: Number.MAX_SAFE_INTEGER,
+      issuedAt: statelessPayload.issuedAt,
+      lastUsedAt: statelessPayload.expiresAt,
+      txHash: `0x${"0".repeat(64)}`,
+      signature: await createSignedEnvelope(context.env.ISSUER_SECRET, statelessPayload)
+    });
+    await next();
+    return;
+  }
+
+  assertPersistentStorage(context.env, ["API_KEYS"]);
+  const parts = providedKey.split(".");
+  const keyId = parts[1];
+  if (!keyId) {
     return context.json(
       {
         error: "The API key format is invalid."
@@ -821,10 +1118,14 @@ app.use("/v1/normalize", async (context, next) => {
   context.set("keyRecord", record);
 
   await next();
-});
+};
+
+app.use("/v1/normalize", requireApiKey);
+app.use("/v1/lint", requireApiKey);
 
 app.post("/v1/normalize", async (context) => {
   const body = NormalizeBodySchema.parse(await context.req.json());
+  const accessPayload = context.get("accessPayload");
   const keyId = context.get("keyId");
   const record = context.get("keyRecord");
   const result = await normalizeStructuredOutput({
@@ -833,24 +1134,62 @@ app.post("/v1/normalize", async (context) => {
     ...(body.provider ? { provider: body.provider } : {})
   });
 
-  const updatedRecord: ApiKeyRecord = {
-    ...record,
-    credits: record.credits - 1,
-    lastUsedAt: new Date().toISOString()
-  };
-  await writeKeyRecord(context.env, updatedRecord);
+  const updatedRecord = await spendCredit(context.env, record);
 
   const signature = await createSignedEnvelope(context.env.ISSUER_SECRET, {
     keyId,
     schemaHash: result.schemaHash,
     normalized: result.normalized,
-    remainingCredits: updatedRecord.credits
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    expiresAt: accessPayload?.expiresAt
   });
 
   return context.json({
     ...result,
-    remainingCredits: updatedRecord.credits,
-    signature
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    signature,
+    ...(accessPayload
+      ? {
+          accessMode: "stateless",
+          expiresAt: accessPayload.expiresAt
+        }
+      : {})
+  });
+});
+
+app.post("/v1/lint", async (context) => {
+  const body = LintBodySchema.parse(await context.req.json());
+  const accessPayload = context.get("accessPayload");
+  const keyId = context.get("keyId");
+  const record = context.get("keyRecord");
+  const report = await lintStructuredOutputSchema({
+    schema: body.schema,
+    ...(body.targets ? { targets: body.targets as SchemaPortabilityTarget[] } : {})
+  });
+  const updatedRecord = await spendCredit(context.env, record);
+
+  const signature = await createSignedEnvelope(context.env.ISSUER_SECRET, {
+    keyId,
+    schemaHash: report.schemaHash,
+    providers: report.providers.map((provider) => ({
+      provider: provider.provider,
+      compatible: provider.compatible,
+      score: provider.score
+    })),
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    expiresAt: accessPayload?.expiresAt
+  });
+
+  return context.json({
+    ...report,
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    signature,
+    ...(accessPayload
+      ? {
+          accessMode: "stateless",
+          expiresAt: accessPayload.expiresAt
+        }
+      : {})
   });
 });
 

@@ -14,19 +14,25 @@ npm publish -w packages/sdk --access public
 2. Deploy the Cloudflare Worker with real secrets.
 
 ```bash
-wrangler kv namespace create API_KEYS
-wrangler kv namespace create POLAR_CLAIMS
-wrangler kv namespace create REDEMPTIONS
 wrangler secret put ISSUER_SECRET
-wrangler secret put RPC_URL
-wrangler secret put CONTRACT_ADDRESS
-wrangler secret put POLAR_WEBHOOK_SECRET
+wrangler secret put POLAR_ACCESS_TOKEN
 wrangler secret put CHECKOUT_URL
 wrangler secret put PUBLIC_CONTACT_EMAIL
 wrangler deploy
 ```
 
-The production Worker should not rely on in-memory storage. Bind the generated KV namespace IDs in `wrangler.toml` before deploying so paid orders, claims, and API keys survive across isolates.
+For the lowest-friction launch, use the stateless Polar access path. It verifies a paid Polar order live and issues a signed time-boxed access key without relying on Cloudflare KV.
+
+If you want durable prepaid credits instead, add Cloudflare KV and the webhook-backed flow:
+
+```bash
+wrangler kv namespace create API_KEYS
+wrangler kv namespace create POLAR_CLAIMS
+wrangler kv namespace create REDEMPTIONS
+wrangler secret put POLAR_WEBHOOK_SECRET
+wrangler secret put RPC_URL
+wrangler secret put CONTRACT_ADDRESS
+```
 
 3. Broadcast the paywall contract with real owner, treasury, and pricing values.
 
@@ -58,11 +64,13 @@ The free package should solve the local 80% case:
 - JSON repair
 - tool-call argument extraction
 - basic coercion
+- schema portability linting across OpenAI, Gemini, Anthropic, and Ollama
 
 The paid Worker should be the 20% upsell:
 
 - signed normalization receipts
-- prepaid key issuance from a Polar `order.paid` webhook or on-chain purchase event
+- signed schema portability reports for CI and release gates
+- stateless paid access keys claimed from a Polar order, or prepaid key issuance from a Polar webhook / on-chain purchase event
 - remote access for shared services and production pipelines
 - centralized observability once you add analytics bindings
 

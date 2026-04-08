@@ -1,4 +1,6 @@
 export type SupportedProvider = "generic" | "openai" | "langchain" | "ollama";
+export type SchemaPortabilityTarget = "openai" | "gemini" | "anthropic" | "ollama";
+export type LintSeverity = "error" | "warning" | "info";
 
 export type SourceKind =
   | "direct"
@@ -14,6 +16,11 @@ export interface NormalizeRequest {
   provider?: SupportedProvider;
 }
 
+export interface LintSchemaRequest {
+  schema: Record<string, unknown>;
+  targets?: SchemaPortabilityTarget[];
+}
+
 export interface NormalizedToolCall {
   name: string;
   arguments: Record<string, unknown>;
@@ -25,6 +32,28 @@ export interface NormalizationIssue {
   code: string;
   message: string;
   path?: string;
+}
+
+export interface SchemaLintIssue {
+  code: string;
+  message: string;
+  path?: string;
+  severity: LintSeverity;
+  provider: SchemaPortabilityTarget;
+  fixApplied?: boolean;
+}
+
+export interface SchemaProviderReport {
+  provider: SchemaPortabilityTarget;
+  compatible: boolean;
+  score: number;
+  normalizedSchema: Record<string, unknown>;
+  issues: SchemaLintIssue[];
+}
+
+export interface SchemaPortabilityReport {
+  schemaHash: `0x${string}`;
+  providers: SchemaProviderReport[];
 }
 
 export interface NormalizationResult {

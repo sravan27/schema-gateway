@@ -24,9 +24,10 @@ export const openApiDocument = {
                   type: "object",
                   properties: {
                     ok: { type: "boolean" },
-                    storage: { type: "string" }
+                    storage: { type: "string" },
+                    ephemeralStorageAllowed: { type: "boolean" }
                   },
-                  required: ["ok", "storage"]
+                  required: ["ok", "storage", "ephemeralStorageAllowed"]
                 }
               }
             }
@@ -74,7 +75,9 @@ export const openApiDocument = {
     },
     "/v1/access/polar/claim": {
       post: {
-        summary: "Claim an API key for a paid Polar order",
+        summary: "Claim paid access for a Polar order",
+        description:
+          "Returns either a stateless signed access key or a stored prepaid API key depending on how the Worker is configured.",
         requestBody: {
           required: true,
           content: {
@@ -104,7 +107,7 @@ export const openApiDocument = {
       post: {
         summary: "Receive Polar billing webhooks",
         description:
-          "Validates webhook signatures and provisions API claims for paid orders.",
+          "Validates webhook signatures and provisions API claims for paid orders when the webhook-backed KV flow is enabled.",
         responses: {
           "202": {
             description: "Webhook accepted"
@@ -144,6 +147,49 @@ export const openApiDocument = {
         responses: {
           "200": {
             description: "Signed normalization result"
+          },
+          "401": {
+            description: "Missing or invalid API key"
+          },
+          "402": {
+            description: "API key has no credits remaining"
+          }
+        }
+      }
+    },
+    "/v1/lint": {
+      post: {
+        summary: "Lint a schema for provider portability",
+        description:
+          "Returns provider-specific compatibility diagnostics and auto-rewritten schema variants for OpenAI, Gemini, Anthropic, and Ollama.",
+        security: [{ apiKeyHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  schema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  targets: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["openai", "gemini", "anthropic", "ollama"]
+                    }
+                  }
+                },
+                required: ["schema"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Signed portability report"
           },
           "401": {
             description: "Missing or invalid API key"
