@@ -1,0 +1,124 @@
+export const openApiDocument = {
+  openapi: "3.1.0",
+  info: {
+    title: "Schema Gateway API",
+    version: "0.1.0",
+    description:
+      "Prepaid machine-to-machine API for structured output normalization, repair, and signed responses."
+  },
+  servers: [
+    {
+      url: "https://schema-gateway.example"
+    }
+  ],
+  paths: {
+    "/health": {
+      get: {
+        summary: "Health check",
+        responses: {
+          "200": {
+            description: "Worker status",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    ok: { type: "boolean" },
+                    storage: { type: "string" }
+                  },
+                  required: ["ok", "storage"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/access/redeem": {
+      post: {
+        summary: "Redeem an on-chain purchase receipt for an API key",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  txHash: {
+                    type: "string",
+                    pattern: "^0x[a-fA-F0-9]{64}$"
+                  },
+                  label: {
+                    type: "string",
+                    minLength: 3,
+                    maxLength: 64
+                  },
+                  chainId: {
+                    type: "integer"
+                  }
+                },
+                required: ["txHash", "label"]
+              }
+            }
+          }
+        },
+        responses: {
+          "201": {
+            description: "A newly issued API key and credit balance"
+          },
+          "409": {
+            description: "The transaction has already been redeemed"
+          }
+        }
+      }
+    },
+    "/v1/normalize": {
+      post: {
+        summary: "Normalize a provider payload against a JSON Schema",
+        security: [{ apiKeyHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  provider: {
+                    type: "string",
+                    enum: ["generic", "openai", "langchain", "ollama"]
+                  },
+                  schema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  payload: {}
+                },
+                required: ["schema", "payload"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Signed normalization result"
+          },
+          "401": {
+            description: "Missing or invalid API key"
+          },
+          "402": {
+            description: "API key has no credits remaining"
+          }
+        }
+      }
+    }
+  },
+  components: {
+    securitySchemes: {
+      apiKeyHeader: {
+        type: "apiKey",
+        in: "header",
+        name: "x-api-key"
+      }
+    }
+  }
+} as const;

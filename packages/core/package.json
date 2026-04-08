@@ -1,0 +1,39 @@
+{
+  "name": "@apex-value/schema-gateway-core",
+  "version": "0.1.0",
+  "description": "Core schema normalization, repair, and signing helpers for Schema Gateway.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "keywords": [
+    "schema",
+    "json-schema",
+    "llm",
+    "tool-calling",
+    "structured-output"
+  ],
+  "dependencies": {
+    "ajv": "8.18.0",
+    "ajv-formats": "3.0.1",
+    "jsonrepair": "3.13.3",
+    "viem": "2.47.10",
+    "zod": "4.3.6"
+  }
+}

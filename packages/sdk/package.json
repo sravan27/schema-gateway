@@ -1,0 +1,38 @@
+{
+  "name": "@apex-value/schema-gateway",
+  "version": "0.1.0",
+  "description": "Free local validator and paid API client for provider-agnostic structured output normalization.",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "schema-gateway": "./dist/cli.js"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "keywords": [
+    "schema",
+    "json-schema",
+    "llm",
+    "structured-output",
+    "cli"
+  ],
+  "dependencies": {
+    "@apex-value/schema-gateway-core": "0.1.0"
+  }
+}

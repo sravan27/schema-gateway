@@ -1,0 +1,25 @@
+{
+  "name": "auto-money",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "bench": "tsx bench/run-bench.ts",
+    "build": "npm run build -w packages/core && npm run build -w packages/sdk && npm run build -w packages/worker && npm run build -w packages/contracts",
+    "compile:contracts": "npm run compile -w packages/contracts",
+    "deploy:worker": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260408.1",
+    "@types/node": "25.5.2",
+    "solc": "0.8.34",
+    "tsx": "4.21.0",
+    "typescript": "6.0.2",
+    "vitest": "4.1.3",
+    "wrangler": "4.81.0"
+  }
+}

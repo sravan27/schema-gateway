@@ -1,0 +1,87 @@
+[
+  {
+    "name": "OpenAI function call arguments",
+    "provider": "openai",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "city": { "type": "string" },
+        "days": { "type": "integer" }
+      },
+      "required": ["city", "days"],
+      "additionalProperties": false
+    },
+    "payload": {
+      "output": [
+        {
+          "type": "function_call",
+          "name": "forecast",
+          "arguments": "{\"city\":\"Tokyo\",\"days\":\"4\"}"
+        }
+      ]
+    },
+    "expectValid": true,
+    "note": "Covers provider function-call envelopes."
+  },
+  {
+    "name": "Fenced JSON with malformed commas",
+    "provider": "generic",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "active": { "type": "boolean" },
+        "count": { "type": "integer" }
+      },
+      "required": ["active", "count"],
+      "additionalProperties": false
+    },
+    "payload": "```json\n{\"active\":\"true\",,\"count\":\"2\"}\n```",
+    "expectValid": true,
+    "note": "Covers JSON extraction and repair."
+  },
+  {
+    "name": "LangChain tool call envelope",
+    "provider": "langchain",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string" },
+        "limit": { "type": "integer" }
+      },
+      "required": ["query", "limit"],
+      "additionalProperties": false
+    },
+    "payload": {
+      "additional_kwargs": {
+        "tool_calls": [
+          {
+            "function": {
+              "name": "search_docs",
+              "arguments": "{\"query\":\"schema drift\",\"limit\":\"5\"}"
+            }
+          }
+        ]
+      }
+    },
+    "expectValid": true,
+    "note": "Covers LangChain-style additional_kwargs tool calls."
+  },
+  {
+    "name": "OpenAI text envelope fallback",
+    "provider": "openai",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "score": { "type": "number" }
+      },
+      "required": ["title", "score"],
+      "additionalProperties": false
+    },
+    "payload": {
+      "output_text": "Here is the result: {\"title\":\"router regression\",\"score\":\"0.81\"}"
+    },
+    "expectValid": true,
+    "note": "Covers plain-text extraction from provider envelopes."
+  }
+]

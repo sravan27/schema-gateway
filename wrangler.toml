@@ -1,0 +1,6 @@
+name = "schema-gateway"
+main = "packages/worker/src/index.ts"
+compatibility_date = "2026-04-08"
+
+[vars]
+ACCESS_TTL_SECONDS = "86400"
