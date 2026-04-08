@@ -10,6 +10,7 @@ import {
   type ApiKeyRecord,
   type PurchaseEventPayload
 } from "@apex-value/schema-gateway-core";
+import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
 import { Hono } from "hono";
 import { decodeEventLog } from "viem";
 import { z } from "zod";
@@ -21,6 +22,9 @@ type Bindings = {
   API_KEYS?: KVNamespace;
   CONTRACT_ADDRESS?: string;
   ISSUER_SECRET: string;
+  POLAR_CLAIMS?: KVNamespace;
+  POLAR_PRODUCT_ID?: string;
+  POLAR_WEBHOOK_SECRET?: string;
   REDEMPTIONS?: KVNamespace;
   RPC_URL?: string;
 };
@@ -31,6 +35,7 @@ type Variables = {
 };
 
 const memoryKeys = new Map<string, ApiKeyRecord>();
+const memoryPolarClaims = new Map<string, PolarClaimRecord>();
 const memoryRedemptions = new Set<string>();
 
 const NormalizeBodySchema = z.object({
@@ -44,6 +49,42 @@ const RedeemBodySchema = z.object({
   label: z.string().min(3).max(64),
   chainId: z.number().int().positive().optional()
 });
+
+const PolarClaimBodySchema = z.object({
+  orderId: z.string().min(1),
+  email: z.string().email()
+});
+
+interface PolarOrderPaidEvent {
+  type: "order.paid";
+  timestamp: string;
+  data: {
+    id: string;
+    product_id?: string | null;
+    total_amount?: number;
+    currency?: string;
+    customer?: {
+      email?: string | null;
+      name?: string | null;
+      external_id?: string | null;
+    } | null;
+    product?: {
+      id?: string | null;
+      name?: string | null;
+    } | null;
+  };
+}
+
+interface PolarClaimRecord {
+  orderId: string;
+  email: string;
+  apiKey: string;
+  keyId: string;
+  credits: number;
+  issuedAt: string;
+  productId?: string;
+  productName?: string;
+}
 
 function getTtlSeconds(env: Bindings): number {
   const parsed = Number.parseInt(env.ACCESS_TTL_SECONDS ?? "86400", 10);
@@ -70,23 +111,47 @@ async function writeKeyRecord(env: Bindings, record: ApiKeyRecord): Promise<void
   memoryKeys.set(record.keyId, record);
 }
 
-async function hasRedemption(env: Bindings, txHash: `0x${string}`): Promise<boolean> {
-  if (env.REDEMPTIONS) {
-    return (await env.REDEMPTIONS.get(`redeemed:${txHash}`)) !== null;
+async function readPolarClaim(env: Bindings, orderId: string): Promise<PolarClaimRecord | null> {
+  if (env.POLAR_CLAIMS) {
+    const record = await env.POLAR_CLAIMS.get(`polar-claim:${orderId}`, "json");
+    return record as PolarClaimRecord | null;
   }
 
-  return memoryRedemptions.has(txHash);
+  return memoryPolarClaims.get(orderId) ?? null;
 }
 
-async function markRedemption(env: Bindings, txHash: `0x${string}`): Promise<void> {
-  if (env.REDEMPTIONS) {
-    await env.REDEMPTIONS.put(`redeemed:${txHash}`, "1", {
+async function writePolarClaim(env: Bindings, record: PolarClaimRecord): Promise<void> {
+  if (env.POLAR_CLAIMS) {
+    await env.POLAR_CLAIMS.put(`polar-claim:${record.orderId}`, JSON.stringify(record), {
       expirationTtl: getTtlSeconds(env)
     });
     return;
   }
 
-  memoryRedemptions.add(txHash);
+  memoryPolarClaims.set(record.orderId, record);
+}
+
+async function hasRedemption(env: Bindings, marker: string): Promise<boolean> {
+  if (env.REDEMPTIONS) {
+    return (await env.REDEMPTIONS.get(`redeemed:${marker}`)) !== null;
+  }
+
+  return memoryRedemptions.has(marker);
+}
+
+async function markRedemption(env: Bindings, marker: string): Promise<void> {
+  if (env.REDEMPTIONS) {
+    await env.REDEMPTIONS.put(`redeemed:${marker}`, "1", {
+      expirationTtl: getTtlSeconds(env)
+    });
+    return;
+  }
+
+  memoryRedemptions.add(marker);
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
 }
 
 function extractApiKey(rawHeaderValue: string | undefined): string | null {
@@ -147,6 +212,49 @@ async function issueApiKey(
     signature,
     label
   };
+}
+
+async function issuePolarClaim(
+  env: Bindings,
+  orderId: string,
+  email: string,
+  productId?: string,
+  productName?: string
+): Promise<PolarClaimRecord> {
+  const keyId = randomToken(9);
+  const apiKey = `sk_live.${keyId}.${randomToken(24)}`;
+  const issuedAt = new Date().toISOString();
+
+  const record: ApiKeyRecord = {
+    keyId,
+    label: productName ?? "Polar purchase",
+    hashedKey: await sha256Hex(apiKey),
+    credits: 1000,
+    issuedAt,
+    signature: await createSignedEnvelope(env.ISSUER_SECRET, {
+      keyId,
+      orderId,
+      email: normalizeEmail(email),
+      issuedAt
+    }),
+    txHash: `0x${"0".repeat(64)}`
+  };
+
+  await writeKeyRecord(env, record);
+
+  const claim: PolarClaimRecord = {
+    orderId,
+    email: normalizeEmail(email),
+    apiKey,
+    keyId,
+    credits: record.credits,
+    issuedAt,
+    ...(productId ? { productId } : {}),
+    ...(productName ? { productName } : {})
+  };
+
+  await writePolarClaim(env, claim);
+  return claim;
 }
 
 async function loadPurchaseEvent(
@@ -265,6 +373,98 @@ app.get("/openapi.json", (context) => {
   return context.json(openApiDocument);
 });
 
+app.post("/v1/webhooks/polar", async (context) => {
+  const webhookSecret = context.env.POLAR_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    return context.json(
+      {
+        error: "POLAR_WEBHOOK_SECRET is not configured."
+      },
+      500
+    );
+  }
+
+  const body = await context.req.text();
+
+  let event: PolarOrderPaidEvent;
+  try {
+    const headers = Object.fromEntries(context.req.raw.headers.entries());
+    event = validateEvent(body, headers, webhookSecret) as unknown as PolarOrderPaidEvent;
+  } catch (error) {
+    if (error instanceof WebhookVerificationError) {
+      return context.json(
+        {
+          error: "Invalid webhook signature."
+        },
+        403
+      );
+    }
+
+    throw error;
+  }
+
+  if (event.type !== "order.paid") {
+    return context.json(
+      {
+        ok: true,
+        ignored: true
+      },
+      202
+    );
+  }
+
+  const productId = event.data.product_id ?? event.data.product?.id ?? undefined;
+  const requiredProductId = context.env.POLAR_PRODUCT_ID;
+  if (requiredProductId && productId && productId !== requiredProductId) {
+    return context.json(
+      {
+        ok: true,
+        ignored: true
+      },
+      202
+    );
+  }
+
+  const email = event.data.customer?.email;
+  if (!email) {
+    return context.json(
+      {
+        error: "Paid order webhook does not include a customer email."
+      },
+      422
+    );
+  }
+
+  const marker = `polar:${event.data.id}`;
+  if (await hasRedemption(context.env, marker)) {
+    return context.json(
+      {
+        ok: true,
+        duplicate: true
+      },
+      202
+    );
+  }
+
+  const claim = await issuePolarClaim(
+    context.env,
+    event.data.id,
+    email,
+    productId,
+    event.data.product?.name ?? undefined
+  );
+  await markRedemption(context.env, marker);
+
+  return context.json(
+    {
+      ok: true,
+      orderId: claim.orderId,
+      keyId: claim.keyId
+    },
+    202
+  );
+});
+
 app.post("/v1/access/redeem", async (context) => {
   const body = RedeemBodySchema.parse(await context.req.json());
 
@@ -287,6 +487,40 @@ app.post("/v1/access/redeem", async (context) => {
   const issued = await issueApiKey(context.env, body.label, purchase.txHash, purchase.credits);
 
   return context.json(issued, 201);
+});
+
+app.post("/v1/access/polar/claim", async (context) => {
+  const body = PolarClaimBodySchema.parse(await context.req.json());
+  const claim = await readPolarClaim(context.env, body.orderId);
+
+  if (!claim) {
+    return context.json(
+      {
+        error: "No Polar claim was found for that order ID."
+      },
+      404
+    );
+  }
+
+  if (normalizeEmail(claim.email) !== normalizeEmail(body.email)) {
+    return context.json(
+      {
+        error: "The email does not match the order."
+      },
+      403
+    );
+  }
+
+  return context.json({
+    orderId: claim.orderId,
+    email: claim.email,
+    apiKey: claim.apiKey,
+    keyId: claim.keyId,
+    credits: claim.credits,
+    issuedAt: claim.issuedAt,
+    productId: claim.productId,
+    productName: claim.productName
+  });
 });
 
 app.use("/v1/normalize", async (context, next) => {

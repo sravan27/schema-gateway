@@ -17,6 +17,7 @@ npm publish -w packages/sdk --access public
 wrangler secret put ISSUER_SECRET
 wrangler secret put RPC_URL
 wrangler secret put CONTRACT_ADDRESS
+wrangler secret put POLAR_WEBHOOK_SECRET
 wrangler deploy
 ```
 
@@ -34,7 +35,7 @@ Remove `--dry-run` when you are ready to send the transaction.
 
 - Free: unlimited local CLI and SDK use
 - Paid: signed remote normalization with prepaid credits
-- Suggested first paid offer: 1 credit per normalization call, sold in batches of 1,000 to 10,000 credits
+- Suggested first paid offer: a low-friction one-time Polar starter pack in INR for initial access credits
 
 5. Put the free tool where developers already look.
 
@@ -54,7 +55,7 @@ The free package should solve the local 80% case:
 The paid Worker should be the 20% upsell:
 
 - signed normalization receipts
-- prepaid key issuance from an on-chain purchase event
+- prepaid key issuance from a Polar `order.paid` webhook or on-chain purchase event
 - remote access for shared services and production pipelines
 - centralized observability once you add analytics bindings
 

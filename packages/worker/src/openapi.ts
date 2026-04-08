@@ -72,6 +72,49 @@ export const openApiDocument = {
         }
       }
     },
+    "/v1/access/polar/claim": {
+      post: {
+        summary: "Claim an API key for a paid Polar order",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  orderId: { type: "string" },
+                  email: { type: "string", format: "email" }
+                },
+                required: ["orderId", "email"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Issued API key for the matching order"
+          },
+          "404": {
+            description: "No claim record found for that order"
+          }
+        }
+      }
+    },
+    "/v1/webhooks/polar": {
+      post: {
+        summary: "Receive Polar billing webhooks",
+        description:
+          "Validates webhook signatures and provisions API claims for paid orders.",
+        responses: {
+          "202": {
+            description: "Webhook accepted"
+          },
+          "403": {
+            description: "Invalid webhook signature"
+          }
+        }
+      }
+    },
     "/v1/normalize": {
       post: {
         summary: "Normalize a provider payload against a JSON Schema",

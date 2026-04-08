@@ -5,6 +5,7 @@
 - a free SDK for local schema validation and tool-call normalization
 - a Cloudflare Worker for paid, signed normalization responses
 - a Solidity paywall contract that accepts native or ERC-20 payments and emits receipts the Worker can redeem into API keys
+- a Polar billing path for legal fiat checkout and API-key provisioning
 
 ## Why this wedge
 
@@ -25,6 +26,13 @@ The product choice is based on current merged PR and research signals from March
 ## API Surface
 
 The Worker exposes a machine-readable spec at `/openapi.json`, making the paid API easy to wire into other services and agent runtimes.
+
+## Billing Paths
+
+The project now supports two paid access paths:
+
+- `Polar`: legal fiat checkout for customers, with a webhook that provisions a claimable API key after `order.paid`
+- `On-chain paywall`: deterministic smart-contract purchase receipts for crypto-native access
 
 ## Local usage
 
@@ -73,6 +81,14 @@ const access = await gateway.redeemCredits({
   txHash,
   label: "router-service"
 });
+```
+
+For the fiat billing path, configure `POLAR_WEBHOOK_SECRET` and point Polar webhooks at `/v1/webhooks/polar`. After checkout, a customer can claim their issued API key with:
+
+```bash
+curl -X POST https://your-worker.example/v1/access/polar/claim \
+  -H 'content-type: application/json' \
+  -d '{"orderId":"<polar-order-id>","email":"customer@example.com"}'
 ```
 
 For the shortest launch path, see [docs/revenue-playbook.md](/Users/sravansridhar/Documents/auto-money/docs/revenue-playbook.md).
