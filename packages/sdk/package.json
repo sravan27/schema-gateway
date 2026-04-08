@@ -4,6 +4,14 @@
   "description": "Free local validator and paid API client for provider-agnostic structured output normalization.",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://schema-gateway.sridharsravan.workers.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sravan27/schema-gateway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sravan27/schema-gateway/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
@@ -30,7 +38,15 @@
     "json-schema",
     "llm",
     "structured-output",
-    "cli"
+    "cli",
+    "openai",
+    "gemini",
+    "anthropic",
+    "ollama",
+    "tool-calling",
+    "response-format",
+    "schema-validation",
+    "ai-agents"
   ],
   "dependencies": {
     "@apex-value/schema-gateway-core": "0.1.0"

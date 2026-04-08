@@ -173,6 +173,36 @@ describe("worker", () => {
     expect(html).toContain("/openapi.json");
     expect(html).toContain("https://buy.polar.sh/test-checkout");
     expect(html).toContain("founder@example.com");
+    expect(html).toContain("/compare");
+    expect(html).toContain("/pricing");
+  });
+
+  it("serves provider comparison and crawl files", async () => {
+    const env: Bindings = {
+      ISSUER_SECRET: "test-secret"
+    };
+
+    const compareResponse = await app.request(
+      "http://example.test/compare/openai-structured-outputs",
+      {},
+      env
+    );
+    expect(compareResponse.status).toBe(200);
+    const compareHtml = await compareResponse.text();
+    expect(compareHtml).toContain("OpenAI Structured Outputs");
+    expect(compareHtml).toContain("developers.openai.com");
+
+    const sitemapResponse = await app.request("http://example.test/sitemap.xml", {}, env);
+    expect(sitemapResponse.status).toBe(200);
+    const sitemap = await sitemapResponse.text();
+    expect(sitemap).toContain("/compare/openai-structured-outputs");
+    expect(sitemap).toContain("/pricing");
+
+    const llmsResponse = await app.request("http://example.test/llms.txt", {}, env);
+    expect(llmsResponse.status).toBe(200);
+    const llms = await llmsResponse.text();
+    expect(llms).toContain("Provider comparison pages");
+    expect(llms).toContain("POST /v1/lint");
   });
 
   it("returns a signed schema portability report and spends one credit", async () => {

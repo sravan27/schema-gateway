@@ -195,16 +195,214 @@ function base64UrlDecode(value: string): string {
   return new TextDecoder().decode(bytes);
 }
 
-function renderLandingPage(context: {
+type ComparePage = {
+  slug: string;
+  shortTitle: string;
+  title: string;
+  description: string;
+  headline: string;
+  intro: string;
+  searchTerms: string[];
+  constraints: string[];
+  fixes: string[];
+  docs: Array<{ label: string; url: string }>;
+  snippet: string;
+};
+
+const PUBLIC_REPO_URL = "https://github.com/sravan27/schema-gateway";
+const ROOT_FAQ = [
+  {
+    question: "What problem does Schema Gateway solve?",
+    answer:
+      "It fixes structured-output portability problems across OpenAI, Gemini, Anthropic compatibility mode, Ollama, and framework wrappers such as LangChain. One schema goes in; provider-specific drift, repair, and portability diagnostics come out."
+  },
+  {
+    question: "Why would a team pay for this instead of validating locally?",
+    answer:
+      "The free SDK covers local validation and repair. The paid service adds signed remote enforcement, provider-portability linting, shared production access, and a claimable access path for teams that need a stable API origin."
+  },
+  {
+    question: "Is this a financial or regulated product?",
+    answer:
+      "No. It is prepaid API software for schema normalization and portability checks. It does not do KYC, custody, money transmission, lending, investing, outreach, or spam."
+  }
+] as const;
+
+const COMPARE_PAGES: ComparePage[] = [
+  {
+    slug: "openai-structured-outputs",
+    shortTitle: "OpenAI",
+    title: "OpenAI Structured Outputs Schema Limits and Fixes",
+    description:
+      "Learn why OpenAI strict structured outputs break on optional properties, missing required fields, and permissive objects, and how Schema Gateway rewrites schemas for production use.",
+    headline: "OpenAI Structured Outputs break when your schema is merely 'valid JSON Schema'.",
+    intro:
+      "OpenAI strict mode is powerful, but it is not a generic JSON Schema runtime. Teams regularly discover this after wiring a schema that validates locally and then fails in production.",
+    searchTerms: [
+      "openai structured outputs additionalProperties false",
+      "openai all fields must be required",
+      "openai strict json schema optional fields"
+    ],
+    constraints: [
+      "Strict mode expects object schemas to pin down their shape instead of leaving extra keys open.",
+      "Optional-looking properties often need to become required nullable fields to preserve semantics cleanly.",
+      "Large or deeply nested schemas become fragile fast."
+    ],
+    fixes: [
+      "Rewrite permissive objects to `additionalProperties: false`.",
+      "Promote missing properties into `required` and make formerly optional fields nullable.",
+      "Score compatibility before shipping so CI catches breakage earlier than runtime."
+    ],
+    docs: [
+      {
+        label: "OpenAI Structured Outputs",
+        url: "https://developers.openai.com/api/docs/guides/structured-outputs"
+      }
+    ],
+    snippet: `schema-gateway lint --schema ./schema.json --target openai`
+  },
+  {
+    slug: "gemini-structured-output",
+    shortTitle: "Gemini",
+    title: "Gemini Structured Output Schema Subset and propertyOrdering",
+    description:
+      "Gemini structured outputs support only a subset of JSON Schema and Gemini 2.0 needs explicit propertyOrdering. Schema Gateway surfaces the gaps and rewrites the schema variant.",
+    headline: "Gemini structured output is not a full JSON Schema engine either.",
+    intro:
+      "Google's Gemini docs explicitly describe a subset model. That means schema portability fails in subtle ways when teams assume one provider-safe JSON Schema will behave identically everywhere.",
+    searchTerms: [
+      "gemini structured output propertyOrdering",
+      "gemini subset json schema structured output",
+      "gemini response_json_schema propertyOrdering"
+    ],
+    constraints: [
+      "Gemini structured output supports only a subset of JSON Schema.",
+      "Gemini 2.0 requires an explicit `propertyOrdering` list for preferred structure.",
+      "Unsupported schema properties can be ignored, which makes failures hard to notice."
+    ],
+    fixes: [
+      "Add `propertyOrdering` automatically where it matters.",
+      "Warn on schema keywords likely to be ignored.",
+      "Generate a provider-specific variant instead of forcing one schema to fit every runtime."
+    ],
+    docs: [
+      {
+        label: "Gemini Structured Outputs",
+        url: "https://ai.google.dev/gemini-api/docs/structured-output"
+      }
+    ],
+    snippet: `schema-gateway lint --schema ./schema.json --target gemini`
+  },
+  {
+    slug: "anthropic-openai-compat",
+    shortTitle: "Anthropic",
+    title: "Anthropic OpenAI Compatibility and strict Schema Drift",
+    description:
+      "Anthropic's OpenAI compatibility layer is useful for testing, but their docs say the strict function-calling parameter is ignored. Schema Gateway catches the mismatch before teams assume conformance.",
+    headline: "Anthropic's OpenAI compatibility mode is for comparison, not blind production parity.",
+    intro:
+      "The compatibility layer is real and useful, but Anthropic documents important differences. If a team expects OpenAI-style strict guarantees through that layer, they can ship false confidence into production.",
+    searchTerms: [
+      "anthropic openai sdk compatibility strict ignored",
+      "claude openai compatibility structured outputs",
+      "anthropic strict function calling ignored"
+    ],
+    constraints: [
+      "Anthropic states that the OpenAI compatibility layer is primarily for testing and comparison.",
+      "The `strict` parameter for function calling is ignored in that layer.",
+      "Some unsupported request fields are silently ignored rather than hard-failing."
+    ],
+    fixes: [
+      "Flag compatibility-mode risk before deploys.",
+      "Separate 'schema-valid' from 'provider-guaranteed'.",
+      "Push teams toward native Claude structured outputs when they need hard conformance."
+    ],
+    docs: [
+      {
+        label: "Anthropic OpenAI SDK compatibility",
+        url: "https://platform.claude.com/docs/en/api/openai-sdk"
+      }
+    ],
+    snippet: `schema-gateway lint --schema ./schema.json --target anthropic`
+  },
+  {
+    slug: "ollama-structured-outputs",
+    shortTitle: "Ollama",
+    title: "Ollama Structured Outputs and Local Model Reliability",
+    description:
+      "Ollama supports structured outputs with JSON schema, but local pipelines still benefit from repair, validation, and provider-portable schema checks. Schema Gateway adds that reliability layer.",
+    headline: "Ollama gives you local structured outputs. You still need guardrails.",
+    intro:
+      "Ollama's structured output support is a strong local building block, but teams still need validation, portability checks, and consistent behavior when the same schema also targets hosted providers.",
+    searchTerms: [
+      "ollama structured outputs json schema",
+      "ollama schema validation structured outputs",
+      "ollama structured output reliability"
+    ],
+    constraints: [
+      "Local models still drift, especially when prompts and schema complexity grow.",
+      "A schema that works in Ollama may still need edits for hosted providers.",
+      "Teams often need one linting layer across local and hosted inference."
+    ],
+    fixes: [
+      "Normalize malformed tool payloads before they hit your application code.",
+      "Use the same schema portability report across Ollama and hosted APIs.",
+      "Keep local validation free while buying shared enforcement only when needed."
+    ],
+    docs: [
+      {
+        label: "Ollama structured outputs",
+        url: "https://ollama.com/blog/structured-outputs"
+      }
+    ],
+    snippet: `schema-gateway validate --schema ./schema.json --payload ./payload.json --provider ollama`
+  }
+];
+
+function serializeJsonLd(value: unknown): string {
+  return JSON.stringify(value).replace(/<\/script/gi, "<\\/script");
+}
+
+function renderSiteNav(baseUrl: string): string {
+  return `<nav class="site-nav">
+    <a class="brand" href="${escapeHtml(baseUrl)}/">Schema Gateway</a>
+    <div class="nav-links">
+      <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
+      <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
+      <a href="${escapeHtml(baseUrl)}/openapi.json">OpenAPI</a>
+      <a href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
+    </div>
+  </nav>`;
+}
+
+function renderSiteFooter(baseUrl: string): string {
+  return `<footer class="site-footer">
+    <div>Schema Gateway ships provider-portable schema validation for OpenAI, Gemini, Anthropic, Ollama, and framework wrappers.</div>
+    <div class="footer-links">
+      <a href="${escapeHtml(baseUrl)}/">Home</a>
+      <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
+      <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
+      <a href="${escapeHtml(baseUrl)}/llms.txt">llms.txt</a>
+      <a href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
+    </div>
+  </footer>`;
+}
+
+function renderCodeBlock(code: string): string {
+  return `<pre><code>${escapeHtml(code)}</code></pre>`;
+}
+
+function renderMarketingPage(context: {
   baseUrl: string;
-  checkoutUrl: string | undefined;
-  contactEmail: string | undefined;
+  path: string;
+  title: string;
+  description: string;
+  body: string;
+  jsonLd?: unknown;
 }): string {
-  const checkoutMarkup = context.checkoutUrl
-    ? `<a class="primary" href="${escapeHtml(context.checkoutUrl)}">Buy prepaid credits</a>`
-    : `<span class="badge">Checkout link available after billing is configured</span>`;
-  const contactMarkup = context.contactEmail
-    ? `<p class="meta">Support: <a href="mailto:${escapeHtml(context.contactEmail)}">${escapeHtml(context.contactEmail)}</a></p>`
+  const canonicalUrl = `${context.baseUrl}${context.path === "/" ? "" : context.path}`;
+  const jsonLdMarkup = context.jsonLd
+    ? `<script type="application/ld+json">${serializeJsonLd(context.jsonLd)}</script>`
     : "";
 
   return `<!doctype html>
@@ -212,7 +410,18 @@ function renderLandingPage(context: {
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Schema Gateway Pro</title>
+    <title>${escapeHtml(context.title)}</title>
+    <meta name="description" content="${escapeHtml(context.description)}">
+    <meta name="robots" content="index,follow">
+    <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="${escapeHtml(context.title)}">
+    <meta property="og:description" content="${escapeHtml(context.description)}">
+    <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="${escapeHtml(context.title)}">
+    <meta name="twitter:description" content="${escapeHtml(context.description)}">
+    ${jsonLdMarkup}
     <style>
       :root {
         color-scheme: light;
@@ -233,10 +442,46 @@ function renderLandingPage(context: {
           linear-gradient(180deg, #fbf7ef 0%, var(--bg) 100%);
         color: var(--ink);
       }
-      main {
-        max-width: 880px;
+      a {
+        color: inherit;
+      }
+      .site-nav,
+      .site-footer {
+        max-width: 1120px;
         margin: 0 auto;
-        padding: 56px 20px 80px;
+        padding: 22px 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+      }
+      .site-footer {
+        border-top: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.95rem;
+        flex-wrap: wrap;
+        padding-bottom: 36px;
+      }
+      .brand {
+        text-decoration: none;
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+      .nav-links,
+      .footer-links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+      .nav-links a,
+      .footer-links a {
+        color: var(--muted);
+        text-decoration: none;
+      }
+      main {
+        max-width: 1120px;
+        margin: 0 auto;
+        padding: 18px 20px 80px;
       }
       .panel {
         background: var(--panel);
@@ -244,6 +489,11 @@ function renderLandingPage(context: {
         border-radius: 24px;
         padding: 28px;
         box-shadow: 0 14px 50px rgba(23, 33, 38, 0.08);
+      }
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(280px, 0.9fr);
+        gap: 22px;
       }
       .eyebrow, .badge, .meta {
         color: var(--muted);
@@ -259,13 +509,22 @@ function renderLandingPage(context: {
         font-size: 1.08rem;
         line-height: 1.65;
       }
+      h2 {
+        margin: 0 0 14px;
+        font-size: clamp(1.35rem, 3vw, 2rem);
+        letter-spacing: -0.03em;
+      }
+      h3 {
+        margin: 0 0 10px;
+        font-size: 1.08rem;
+      }
       .actions {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
         margin: 28px 0 6px;
       }
-      .primary, .secondary {
+      .primary, .secondary, .ghost {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -282,6 +541,11 @@ function renderLandingPage(context: {
       .secondary {
         border: 1px solid var(--border);
         color: var(--ink);
+        background: rgba(255, 255, 255, 0.85);
+      }
+      .ghost {
+        border: 1px dashed var(--border);
+        color: var(--muted);
       }
       .grid {
         display: grid;
@@ -295,6 +559,59 @@ function renderLandingPage(context: {
         padding: 18px;
         background: rgba(255, 255, 255, 0.7);
       }
+      .stack {
+        display: grid;
+        gap: 18px;
+      }
+      .section {
+        margin-top: 26px;
+      }
+      .list {
+        margin: 0;
+        padding-left: 18px;
+        display: grid;
+        gap: 8px;
+      }
+      .matrix {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.97rem;
+      }
+      .matrix th,
+      .matrix td {
+        border-top: 1px solid var(--border);
+        padding: 12px 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      .matrix th {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .pill-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 18px;
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(15, 118, 110, 0.08);
+        border: 1px solid rgba(15, 118, 110, 0.18);
+        color: #0b5d57;
+        font-size: 0.92rem;
+      }
+      pre {
+        margin: 0;
+        overflow-x: auto;
+        border-radius: 18px;
+        padding: 16px;
+        background: #132028;
+        color: #f4efe5;
+      }
       code {
         font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
         font-size: 0.95em;
@@ -303,53 +620,319 @@ function renderLandingPage(context: {
         margin: 10px 0 0;
         padding-left: 18px;
       }
+      .faq-item + .faq-item {
+        margin-top: 16px;
+      }
+      @media (max-width: 840px) {
+        .hero {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
-    <main>
-      <section class="panel">
-        <div class="eyebrow">Machine-to-machine AI infrastructure</div>
-        <h1>Schema Gateway Pro</h1>
-        <p>
-          Schema Gateway is a developer API that normalizes and validates structured LLM outputs
-          and tool-call payloads across providers. Teams use it to reduce provider drift, lint
-          one schema against multiple vendors, sign normalized responses, and gate production
-          traffic behind paid access keys.
-        </p>
-        <div class="actions">
-          ${checkoutMarkup}
-          <a class="secondary" href="${escapeHtml(context.baseUrl)}/openapi.json">OpenAPI spec</a>
-        </div>
-        <p class="meta">Base URL: <code>${escapeHtml(context.baseUrl)}</code></p>
-        ${contactMarkup}
-        <div class="grid">
-          <article class="card">
-            <strong>Paid API</strong>
-            <ul>
-              <li><code>POST /v1/normalize</code></li>
-              <li><code>POST /v1/access/polar/claim</code></li>
-              <li><code>POST /v1/access/redeem</code></li>
-            </ul>
-          </article>
-          <article class="card">
-            <strong>Compliance</strong>
-            <p class="meta">
-              This is prepaid API software. It does not provide financial services, money
-              transmission, KYC, investing, or outreach automation.
-            </p>
-          </article>
-          <article class="card">
-            <strong>Upgrade path</strong>
-            <p class="meta">
-              Start with the open-source SDK, then move to signed responses, portability linting,
-              and paid shared access when you need production enforcement.
-            </p>
-          </article>
-        </div>
-      </section>
-    </main>
+    ${renderSiteNav(context.baseUrl)}
+    <main>${context.body}</main>
+    ${renderSiteFooter(context.baseUrl)}
   </body>
 </html>`;
+}
+
+function renderLandingPage(context: {
+  baseUrl: string;
+  checkoutUrl: string | undefined;
+  contactEmail: string | undefined;
+}): string {
+  const checkoutMarkup = context.checkoutUrl
+    ? `<a class="primary" href="${escapeHtml(context.checkoutUrl)}">Buy API access for Rs 499</a>`
+    : `<span class="ghost">Checkout link available after billing is configured</span>`;
+  const contactMarkup = context.contactEmail
+    ? `<p class="meta">Support: <a href="mailto:${escapeHtml(context.contactEmail)}">${escapeHtml(context.contactEmail)}</a></p>`
+    : "";
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: ROOT_FAQ.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.answer
+      }
+    }))
+  };
+  const softwareJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "Schema Gateway Pro",
+    applicationCategory: "DeveloperApplication",
+    operatingSystem: "Web",
+    description:
+      "Provider-portable structured output normalization and schema linting for OpenAI, Gemini, Anthropic, Ollama, and framework wrappers.",
+    offers: {
+      "@type": "Offer",
+      price: "499",
+      priceCurrency: "INR",
+      url: context.checkoutUrl ?? `${context.baseUrl}/pricing`
+    }
+  };
+
+  return renderMarketingPage({
+    baseUrl: context.baseUrl,
+    path: "/",
+    title: "Schema Gateway Pro | Structured Output Portability API",
+    description:
+      "Stop rewriting JSON Schema for every model vendor. Schema Gateway lints, normalizes, and signs structured outputs across OpenAI, Gemini, Anthropic, Ollama, and LangChain-style wrappers.",
+    jsonLd: [softwareJsonLd, faqJsonLd],
+    body: `<section class="panel hero">
+        <article class="stack">
+          <div class="eyebrow">Structured output portability for AI teams</div>
+          <h1>Stop rewriting one schema for every model vendor.</h1>
+          <p>
+            Schema Gateway exists for the moment when your JSON Schema passes local validation but
+            breaks under OpenAI strict mode, Gemini subset handling, Anthropic compatibility mode,
+            or local-model wrappers. We lint the schema, rewrite safe provider variants, normalize
+            malformed payloads, and return signed results for production pipelines.
+          </p>
+          <div class="actions">
+            ${checkoutMarkup}
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compare">See provider comparisons</a>
+            <a class="secondary" href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
+          </div>
+          <div class="pill-row">
+            <span class="pill">OpenAI strict schema fixes</span>
+            <span class="pill">Gemini propertyOrdering support</span>
+            <span class="pill">Anthropic compatibility warnings</span>
+            <span class="pill">Ollama validation guardrails</span>
+          </div>
+        </article>
+        <aside class="card stack">
+          <div class="eyebrow">Free first, paid when shared enforcement matters</div>
+          <h3>What you can use today</h3>
+          <ul class="list">
+            <li>Free local CLI and SDK for schema validation and JSON repair</li>
+            <li>Portable schema linting across OpenAI, Gemini, Anthropic, and Ollama</li>
+            <li>Paid stateless access claims via Polar when you need a shared API</li>
+          </ul>
+          <div class="section">
+            ${renderCodeBlock(`schema-gateway lint --schema ./schema.json --target openai,gemini`)}
+          </div>
+          <p class="meta">Base URL: <code>${escapeHtml(context.baseUrl)}</code></p>
+          ${contactMarkup}
+        </aside>
+      </section>
+      <section class="panel section">
+        <h2>Why teams search for this</h2>
+        <table class="matrix">
+          <thead>
+            <tr>
+              <th>Provider</th>
+              <th>What breaks</th>
+              <th>What Schema Gateway does</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>OpenAI</td>
+              <td>Strict structured outputs reject schemas that look valid but keep optional fields or permissive objects.</td>
+              <td>Rewrites required and nullable fields, closes object shapes, and scores strict compatibility.</td>
+            </tr>
+            <tr>
+              <td>Gemini</td>
+              <td>Structured output supports a subset of JSON Schema and Gemini 2.0 needs explicit <code>propertyOrdering</code>.</td>
+              <td>Adds provider-specific ordering and flags subset-only schema drift.</td>
+            </tr>
+            <tr>
+              <td>Anthropic compatibility</td>
+              <td>The OpenAI compatibility layer is convenient, but strict guarantees do not map cleanly.</td>
+              <td>Flags compatibility-mode risks before teams assume schema conformance.</td>
+            </tr>
+            <tr>
+              <td>Ollama</td>
+              <td>Local structured output is useful, but local and hosted providers still diverge.</td>
+              <td>Keeps one portability report and validation layer across local and hosted runtimes.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+      <section class="grid section">
+        ${COMPARE_PAGES.map(
+          (page) => `<article class="card">
+              <div class="eyebrow">${escapeHtml(page.shortTitle)} compatibility</div>
+              <h3>${escapeHtml(page.title)}</h3>
+              <p class="meta">${escapeHtml(page.description)}</p>
+              <div class="actions">
+                <a class="secondary" href="${escapeHtml(context.baseUrl)}/compare/${escapeHtml(page.slug)}">Open page</a>
+              </div>
+            </article>`
+        ).join("")}
+      </section>
+      <section class="grid section">
+        <article class="panel">
+          <h2>Free local workflow</h2>
+          <p>Developers can lint and validate locally before buying anything.</p>
+          ${renderCodeBlock(`schema-gateway validate --schema ./schema.json --payload ./payload.json
+schema-gateway lint --schema ./schema.json --target openai,gemini,anthropic,ollama`)}
+        </article>
+        <article class="panel">
+          <h2>Paid claim flow</h2>
+          <p>Buy access once, then claim a signed access key from the paid Polar order.</p>
+          ${renderCodeBlock(`curl -X POST ${context.baseUrl}/v1/access/polar/claim \\
+  -H 'content-type: application/json' \\
+  -d '{"orderId":"polar_order_id","email":"you@example.com"}'`)}
+        </article>
+      </section>
+      <section class="panel section" id="faq">
+        <h2>FAQ</h2>
+        ${ROOT_FAQ.map(
+          (item) => `<div class="faq-item">
+              <h3>${escapeHtml(item.question)}</h3>
+              <p>${escapeHtml(item.answer)}</p>
+            </div>`
+        ).join("")}
+      </section>`
+  });
+}
+
+function renderCompareIndexPage(baseUrl: string): string {
+  return renderMarketingPage({
+    baseUrl,
+    path: "/compare",
+    title: "Schema Gateway Comparisons | OpenAI, Gemini, Anthropic, Ollama",
+    description:
+      "Provider-specific structured output comparison pages for OpenAI, Gemini, Anthropic compatibility mode, and Ollama.",
+    body: `<section class="panel">
+        <div class="eyebrow">Provider comparisons</div>
+        <h1>Vendor-specific schema drift, documented page by page.</h1>
+        <p>
+          These pages target the exact compatibility failures teams hit when they try to reuse one
+          JSON Schema across multiple model providers and SDK layers.
+        </p>
+      </section>
+      <section class="grid section">
+        ${COMPARE_PAGES.map(
+          (page) => `<article class="card stack">
+              <div class="eyebrow">${escapeHtml(page.shortTitle)}</div>
+              <h3>${escapeHtml(page.title)}</h3>
+              <p class="meta">${escapeHtml(page.description)}</p>
+              <div class="actions">
+                <a class="secondary" href="${escapeHtml(baseUrl)}/compare/${escapeHtml(page.slug)}">Read comparison</a>
+              </div>
+            </article>`
+        ).join("")}
+      </section>`
+  });
+}
+
+function renderComparePage(baseUrl: string, page: ComparePage): string {
+  const articleJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: page.title,
+    description: page.description,
+    url: `${baseUrl}/compare/${page.slug}`
+  };
+
+  return renderMarketingPage({
+    baseUrl,
+    path: `/compare/${page.slug}`,
+    title: `${page.title} | Schema Gateway`,
+    description: page.description,
+    jsonLd: articleJsonLd,
+    body: `<section class="panel hero">
+        <article class="stack">
+          <div class="eyebrow">${escapeHtml(page.shortTitle)} structured output guide</div>
+          <h1>${escapeHtml(page.headline)}</h1>
+          <p>${escapeHtml(page.intro)}</p>
+          <div class="pill-row">
+            ${page.searchTerms.map((term) => `<span class="pill">${escapeHtml(term)}</span>`).join("")}
+          </div>
+          <div class="actions">
+            <a class="primary" href="${escapeHtml(baseUrl)}/pricing">Buy access</a>
+            <a class="secondary" href="${escapeHtml(baseUrl)}/compare">All comparisons</a>
+          </div>
+        </article>
+        <aside class="card stack">
+          <h3>Schema Gateway move</h3>
+          <p class="meta">${escapeHtml(page.description)}</p>
+          ${renderCodeBlock(page.snippet)}
+        </aside>
+      </section>
+      <section class="grid section">
+        <article class="panel">
+          <h2>What breaks</h2>
+          <ul class="list">
+            ${page.constraints.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>What Schema Gateway fixes</h2>
+          <ul class="list">
+            ${page.fixes.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          </ul>
+        </article>
+      </section>
+      <section class="panel section">
+        <h2>Official references</h2>
+        <ul class="list">
+          ${page.docs
+            .map(
+              (doc) =>
+                `<li><a href="${escapeHtml(doc.url)}">${escapeHtml(doc.label)}</a></li>`
+            )
+            .join("")}
+        </ul>
+      </section>`
+  });
+}
+
+function renderPricingPage(context: {
+  baseUrl: string;
+  checkoutUrl: string | undefined;
+}): string {
+  const checkoutMarkup = context.checkoutUrl
+    ? `<a class="primary" href="${escapeHtml(context.checkoutUrl)}">Buy starter access for Rs 499</a>`
+    : `<span class="ghost">Checkout not configured</span>`;
+
+  return renderMarketingPage({
+    baseUrl: context.baseUrl,
+    path: "/pricing",
+    title: "Schema Gateway Pricing | Free local SDK, Rs 499 starter access",
+    description:
+      "Free local SDK and CLI for schema validation, with a paid Rs 499 starter pack for shared API access and signed portability reports.",
+    body: `<section class="grid">
+        <article class="panel">
+          <div class="eyebrow">Free tier</div>
+          <h1>Use the SDK locally for free.</h1>
+          <ul class="list">
+            <li>Local schema validation and JSON repair</li>
+            <li>Provider-portability linting in the CLI and SDK</li>
+            <li>No checkout needed for local use</li>
+          </ul>
+          <div class="section">
+            ${renderCodeBlock(`npm install
+schema-gateway lint --schema ./schema.json --target openai,gemini`)}
+          </div>
+        </article>
+        <article class="panel">
+          <div class="eyebrow">Paid starter</div>
+          <h2>Rs 499 one-time starter access</h2>
+          <p>
+            Best for teams that need a shared API endpoint, signed lint reports, and remote
+            normalization behind a stable base URL.
+          </p>
+          <ul class="list">
+            <li>Signed portability reports from <code>POST /v1/lint</code></li>
+            <li>Signed normalization results from <code>POST /v1/normalize</code></li>
+            <li>Self-serve claim flow after a Polar purchase</li>
+          </ul>
+          <div class="actions">
+            ${checkoutMarkup}
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/openapi.json">OpenAPI spec</a>
+          </div>
+        </article>
+      </section>`
+  });
 }
 
 async function readKeyRecord(env: Bindings, keyId: string): Promise<ApiKeyRecord | null> {
@@ -809,6 +1392,95 @@ app.get("/", (context) => {
       contactEmail: context.env.PUBLIC_CONTACT_EMAIL
     })
   );
+});
+
+app.get("/compare", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(renderCompareIndexPage(baseUrl));
+});
+
+app.get("/compare/:slug", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  const slug = context.req.param("slug");
+  const page = COMPARE_PAGES.find((entry) => entry.slug === slug);
+
+  if (!page) {
+    return context.text("Not found", 404);
+  }
+
+  return context.html(renderComparePage(baseUrl, page));
+});
+
+app.get("/pricing", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(
+    renderPricingPage({
+      baseUrl,
+      checkoutUrl: context.env.CHECKOUT_URL
+    })
+  );
+});
+
+app.get("/robots.txt", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.text(`User-agent: *
+Allow: /
+
+Sitemap: ${baseUrl}/sitemap.xml
+`, 200, {
+    "content-type": "text/plain; charset=utf-8"
+  });
+});
+
+app.get("/llms.txt", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  const compareLines = COMPARE_PAGES.map(
+    (page) => `- ${page.title}: ${baseUrl}/compare/${page.slug}`
+  ).join("\n");
+
+  return context.text(
+    `# Schema Gateway Pro
+
+Schema Gateway is a developer API for structured output portability across OpenAI, Gemini, Anthropic compatibility mode, Ollama, and framework wrappers.
+
+Primary pages:
+- Home: ${baseUrl}/
+- Comparisons: ${baseUrl}/compare
+- Pricing: ${baseUrl}/pricing
+- OpenAPI: ${baseUrl}/openapi.json
+
+Provider comparison pages:
+${compareLines}
+
+Primary paid endpoints:
+- POST /v1/lint
+- POST /v1/normalize
+- POST /v1/access/polar/claim
+`,
+    200,
+    {
+      "content-type": "text/plain; charset=utf-8"
+    }
+  );
+});
+
+app.get("/sitemap.xml", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  const routes = ["/", "/compare", "/pricing", ...COMPARE_PAGES.map((page) => `/compare/${page.slug}`)];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${routes
+  .map(
+    (path) => `  <url>
+    <loc>${escapeHtml(`${baseUrl}${path === "/" ? "" : path}`)}</loc>
+  </url>`
+  )
+  .join("\n")}
+</urlset>`;
+
+  return context.text(xml, 200, {
+    "content-type": "application/xml; charset=utf-8"
+  });
 });
 
 app.get("/health", (context) => {

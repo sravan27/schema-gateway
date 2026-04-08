@@ -4,6 +4,14 @@
   "description": "Core schema normalization, repair, and signing helpers for Schema Gateway.",
   "license": "MIT",
   "type": "module",
+  "homepage": "https://schema-gateway.sridharsravan.workers.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sravan27/schema-gateway.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sravan27/schema-gateway/issues"
+  },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "sideEffects": false,
@@ -27,7 +35,14 @@
     "json-schema",
     "llm",
     "tool-calling",
-    "structured-output"
+    "structured-output",
+    "openai",
+    "gemini",
+    "anthropic",
+    "ollama",
+    "schema-portability",
+    "schema-validation",
+    "function-calling"
   ],
   "dependencies": {
     "ajv": "8.18.0",

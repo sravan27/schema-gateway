@@ -8,6 +8,14 @@
 - a Solidity paywall contract that accepts native or ERC-20 payments and emits receipts the Worker can redeem into API keys
 - a Polar billing path for legal fiat checkout and API-key provisioning
 
+Live surfaces:
+
+- Site: [https://schema-gateway.sridharsravan.workers.dev](https://schema-gateway.sridharsravan.workers.dev)
+- Comparisons: [https://schema-gateway.sridharsravan.workers.dev/compare](https://schema-gateway.sridharsravan.workers.dev/compare)
+- Pricing: [https://schema-gateway.sridharsravan.workers.dev/pricing](https://schema-gateway.sridharsravan.workers.dev/pricing)
+- OpenAPI: [https://schema-gateway.sridharsravan.workers.dev/openapi.json](https://schema-gateway.sridharsravan.workers.dev/openapi.json)
+- Checkout: [https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK)
+
 ## Why this wedge
 
 The product choice is based on current merged PR and research signals from March 9, 2026 through April 8, 2026:
@@ -27,6 +35,13 @@ The product choice is based on current merged PR and research signals from March
 ## API Surface
 
 The Worker exposes a machine-readable spec at `/openapi.json`, and the root path `/` can serve as the public product page on a free `workers.dev` URL.
+
+It also ships indexable comparison pages for:
+
+- OpenAI structured outputs: `/compare/openai-structured-outputs`
+- Gemini structured output: `/compare/gemini-structured-output`
+- Anthropic compatibility: `/compare/anthropic-openai-compat`
+- Ollama structured outputs: `/compare/ollama-structured-outputs`
 
 ## Billing Paths
 
