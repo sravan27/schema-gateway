@@ -16,6 +16,7 @@ describe("worker", () => {
   it("redeems a purchase receipt and spends a credit on normalization", async () => {
     const env: Bindings = {
       ACCESS_TTL_SECONDS: "3600",
+      ALLOW_EPHEMERAL_STORAGE: "true",
       CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000abc",
       ISSUER_SECRET: "test-secret",
       RPC_URL: "https://rpc.example"
@@ -129,5 +130,48 @@ describe("worker", () => {
       active: true
     });
     expect(normalized.remainingCredits).toBe(2);
+  });
+
+  it("fails loudly when a paid route is deployed without persistent storage", async () => {
+    const env: Bindings = {
+      ISSUER_SECRET: "test-secret"
+    };
+
+    const response = await app.request(
+      "http://example.test/v1/access/polar/claim",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          orderId: "polar-order-1",
+          email: "buyer@example.com"
+        })
+      },
+      env
+    );
+
+    expect(response.status).toBe(503);
+    const body = (await response.json()) as { error: string };
+    expect(body.error).toContain("Persistent storage is required");
+    expect(body.error).toContain("POLAR_CLAIMS");
+  });
+
+  it("serves a product landing page at the root path", async () => {
+    const env: Bindings = {
+      CHECKOUT_URL: "https://buy.polar.sh/test-checkout",
+      ISSUER_SECRET: "test-secret",
+      PUBLIC_CONTACT_EMAIL: "founder@example.com"
+    };
+
+    const response = await app.request("http://example.test/", {}, env);
+
+    expect(response.status).toBe(200);
+    const html = await response.text();
+    expect(html).toContain("Schema Gateway Pro");
+    expect(html).toContain("/openapi.json");
+    expect(html).toContain("https://buy.polar.sh/test-checkout");
+    expect(html).toContain("founder@example.com");
   });
 });

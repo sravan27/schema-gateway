@@ -25,7 +25,7 @@ The product choice is based on current merged PR and research signals from March
 
 ## API Surface
 
-The Worker exposes a machine-readable spec at `/openapi.json`, making the paid API easy to wire into other services and agent runtimes.
+The Worker exposes a machine-readable spec at `/openapi.json`, and the root path `/` can serve as the public product page on a free `workers.dev` URL.
 
 ## Billing Paths
 
@@ -99,6 +99,8 @@ Run the Worker locally:
 cp .dev.vars.example .dev.vars
 npm run dev
 ```
+
+For local development, `.dev.vars.example` enables `ALLOW_EPHEMERAL_STORAGE=true` so you can test without Cloudflare KV. For any paid deployment, bind `API_KEYS`, `POLAR_CLAIMS`, and `REDEMPTIONS` KV namespaces and leave ephemeral storage disabled.
 
 Compile the contract:
 

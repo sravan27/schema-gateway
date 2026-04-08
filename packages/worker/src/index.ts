@@ -13,18 +13,21 @@ import {
 import { WebhookVerificationError, validateEvent } from "@polar-sh/sdk/webhooks";
 import { Hono } from "hono";
 import { decodeEventLog } from "viem";
-import { z } from "zod";
+import { ZodError, z } from "zod";
 
 import { openApiDocument } from "./openapi.js";
 
 type Bindings = {
   ACCESS_TTL_SECONDS?: string;
+  ALLOW_EPHEMERAL_STORAGE?: string;
   API_KEYS?: KVNamespace;
+  CHECKOUT_URL?: string;
   CONTRACT_ADDRESS?: string;
   ISSUER_SECRET: string;
   POLAR_CLAIMS?: KVNamespace;
   POLAR_PRODUCT_ID?: string;
   POLAR_WEBHOOK_SECRET?: string;
+  PUBLIC_CONTACT_EMAIL?: string;
   REDEMPTIONS?: KVNamespace;
   RPC_URL?: string;
 };
@@ -86,9 +89,211 @@ interface PolarClaimRecord {
   productName?: string;
 }
 
+type StorageBindingName = "API_KEYS" | "POLAR_CLAIMS" | "REDEMPTIONS";
+
+class StorageConfigurationError extends Error {
+  constructor(missingBindings: StorageBindingName[]) {
+    const joined = missingBindings.join(", ");
+    super(
+      `Persistent storage is required for this route. Missing Cloudflare KV binding(s): ${joined}. Bind them in Wrangler, or set ALLOW_EPHEMERAL_STORAGE=true for local development only.`
+    );
+    this.name = "StorageConfigurationError";
+  }
+}
+
 function getTtlSeconds(env: Bindings): number {
   const parsed = Number.parseInt(env.ACCESS_TTL_SECONDS ?? "86400", 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 86400;
+}
+
+function allowsEphemeralStorage(env: Bindings): boolean {
+  return env.ALLOW_EPHEMERAL_STORAGE === "true";
+}
+
+function assertPersistentStorage(
+  env: Bindings,
+  requiredBindings: StorageBindingName[]
+): void {
+  if (allowsEphemeralStorage(env)) {
+    return;
+  }
+
+  const bindings = {
+    API_KEYS: env.API_KEYS,
+    POLAR_CLAIMS: env.POLAR_CLAIMS,
+    REDEMPTIONS: env.REDEMPTIONS
+  } satisfies Record<StorageBindingName, KVNamespace | undefined>;
+  const missingBindings = requiredBindings.filter((binding) => !bindings[binding]);
+
+  if (missingBindings.length > 0) {
+    throw new StorageConfigurationError(missingBindings);
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function renderLandingPage(context: {
+  baseUrl: string;
+  checkoutUrl: string | undefined;
+  contactEmail: string | undefined;
+}): string {
+  const checkoutMarkup = context.checkoutUrl
+    ? `<a class="primary" href="${escapeHtml(context.checkoutUrl)}">Buy prepaid credits</a>`
+    : `<span class="badge">Checkout link available after billing is configured</span>`;
+  const contactMarkup = context.contactEmail
+    ? `<p class="meta">Support: <a href="mailto:${escapeHtml(context.contactEmail)}">${escapeHtml(context.contactEmail)}</a></p>`
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Schema Gateway Pro</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f4efe5;
+        --panel: #fffdf8;
+        --ink: #172126;
+        --muted: #54616b;
+        --accent: #0f766e;
+        --accent-ink: #f6fffd;
+        --border: #d8d2c7;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        background:
+          radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 30%),
+          linear-gradient(180deg, #fbf7ef 0%, var(--bg) 100%);
+        color: var(--ink);
+      }
+      main {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 56px 20px 80px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 24px;
+        padding: 28px;
+        box-shadow: 0 14px 50px rgba(23, 33, 38, 0.08);
+      }
+      .eyebrow, .badge, .meta {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      h1 {
+        margin: 10px 0 14px;
+        font-size: clamp(2.3rem, 6vw, 4.4rem);
+        line-height: 0.98;
+        letter-spacing: -0.04em;
+      }
+      p {
+        font-size: 1.08rem;
+        line-height: 1.65;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        margin: 28px 0 6px;
+      }
+      .primary, .secondary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        border-radius: 999px;
+        padding: 0 18px;
+        text-decoration: none;
+        font-weight: 600;
+      }
+      .primary {
+        background: var(--accent);
+        color: var(--accent-ink);
+      }
+      .secondary {
+        border: 1px solid var(--border);
+        color: var(--ink);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 14px;
+        margin-top: 28px;
+      }
+      .card {
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 18px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+      code {
+        font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+        font-size: 0.95em;
+      }
+      ul {
+        margin: 10px 0 0;
+        padding-left: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="panel">
+        <div class="eyebrow">Machine-to-machine AI infrastructure</div>
+        <h1>Schema Gateway Pro</h1>
+        <p>
+          Schema Gateway is a developer API that normalizes and validates structured LLM outputs
+          and tool-call payloads across providers. Teams use it to reduce provider drift, sign
+          normalized responses, and gate production traffic behind prepaid credits.
+        </p>
+        <div class="actions">
+          ${checkoutMarkup}
+          <a class="secondary" href="${escapeHtml(context.baseUrl)}/openapi.json">OpenAPI spec</a>
+          <a class="secondary" href="https://github.com/sravan27/auto-money">GitHub repo</a>
+        </div>
+        <p class="meta">Base URL: <code>${escapeHtml(context.baseUrl)}</code></p>
+        ${contactMarkup}
+        <div class="grid">
+          <article class="card">
+            <strong>Paid API</strong>
+            <ul>
+              <li><code>POST /v1/normalize</code></li>
+              <li><code>POST /v1/access/polar/claim</code></li>
+              <li><code>POST /v1/access/redeem</code></li>
+            </ul>
+          </article>
+          <article class="card">
+            <strong>Compliance</strong>
+            <p class="meta">
+              This is prepaid API software. It does not provide financial services, money
+              transmission, KYC, investing, or outreach automation.
+            </p>
+          </article>
+          <article class="card">
+            <strong>Upgrade path</strong>
+            <p class="meta">
+              Start with the open-source SDK, then move to signed responses and prepaid credits
+              when you need shared production access.
+            </p>
+          </article>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>`;
 }
 
 async function readKeyRecord(env: Bindings, keyId: string): Promise<ApiKeyRecord | null> {
@@ -354,6 +559,25 @@ async function loadPurchaseEvent(
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 app.onError((error, context) => {
+  if (error instanceof ZodError) {
+    return context.json(
+      {
+        error: "Invalid request body.",
+        issues: error.flatten()
+      },
+      400
+    );
+  }
+
+  if (error instanceof StorageConfigurationError) {
+    return context.json(
+      {
+        error: error.message
+      },
+      503
+    );
+  }
+
   return context.json(
     {
       error: error.message
@@ -362,10 +586,22 @@ app.onError((error, context) => {
   );
 });
 
+app.get("/", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(
+    renderLandingPage({
+      baseUrl,
+      checkoutUrl: context.env.CHECKOUT_URL,
+      contactEmail: context.env.PUBLIC_CONTACT_EMAIL
+    })
+  );
+});
+
 app.get("/health", (context) => {
   return context.json({
     ok: true,
-    storage: context.env.API_KEYS ? "kv" : "memory"
+    storage: context.env.API_KEYS ? "kv" : "memory",
+    ephemeralStorageAllowed: allowsEphemeralStorage(context.env)
   });
 });
 
@@ -374,6 +610,8 @@ app.get("/openapi.json", (context) => {
 });
 
 app.post("/v1/webhooks/polar", async (context) => {
+  assertPersistentStorage(context.env, ["API_KEYS", "POLAR_CLAIMS", "REDEMPTIONS"]);
+
   const webhookSecret = context.env.POLAR_WEBHOOK_SECRET;
   if (!webhookSecret) {
     return context.json(
@@ -466,6 +704,7 @@ app.post("/v1/webhooks/polar", async (context) => {
 });
 
 app.post("/v1/access/redeem", async (context) => {
+  assertPersistentStorage(context.env, ["API_KEYS", "REDEMPTIONS"]);
   const body = RedeemBodySchema.parse(await context.req.json());
 
   if (await hasRedemption(context.env, body.txHash as `0x${string}`)) {
@@ -490,6 +729,7 @@ app.post("/v1/access/redeem", async (context) => {
 });
 
 app.post("/v1/access/polar/claim", async (context) => {
+  assertPersistentStorage(context.env, ["POLAR_CLAIMS"]);
   const body = PolarClaimBodySchema.parse(await context.req.json());
   const claim = await readPolarClaim(context.env, body.orderId);
 
@@ -524,6 +764,7 @@ app.post("/v1/access/polar/claim", async (context) => {
 });
 
 app.use("/v1/normalize", async (context, next) => {
+  assertPersistentStorage(context.env, ["API_KEYS"]);
   const providedKey =
     extractApiKey(context.req.header("x-api-key")) ??
     extractApiKey(context.req.header("authorization"));
