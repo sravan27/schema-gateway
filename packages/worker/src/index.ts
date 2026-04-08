@@ -174,8 +174,14 @@ function escapeHtml(value: string): string {
 }
 
 function base64UrlEncode(value: string): string {
-  return Buffer.from(value, "utf8")
-    .toString("base64")
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/g, "");
@@ -184,7 +190,9 @@ function base64UrlEncode(value: string): string {
 function base64UrlDecode(value: string): string {
   const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
   const padding = normalized.length % 4 === 0 ? "" : "=".repeat(4 - (normalized.length % 4));
-  return Buffer.from(`${normalized}${padding}`, "base64").toString("utf8");
+  const binary = atob(`${normalized}${padding}`);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
 }
 
 function renderLandingPage(context: {
@@ -311,7 +319,6 @@ function renderLandingPage(context: {
         <div class="actions">
           ${checkoutMarkup}
           <a class="secondary" href="${escapeHtml(context.baseUrl)}/openapi.json">OpenAPI spec</a>
-          <a class="secondary" href="https://github.com/sravan27/auto-money">GitHub repo</a>
         </div>
         <p class="meta">Base URL: <code>${escapeHtml(context.baseUrl)}</code></p>
         ${contactMarkup}
