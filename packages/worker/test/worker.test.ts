@@ -197,6 +197,8 @@ describe("worker", () => {
     const compilerHtml = await compilerResponse.text();
     expect(compilerHtml).toContain("Turn one schema into provider-ready request payloads");
     expect(compilerHtml).toContain("schema-gateway compile");
+    expect(compilerHtml).toContain("Run free demo");
+    expect(compilerHtml).toContain("/v1/demo/compile");
 
     const ciResponse = await app.request("http://example.test/ci", {}, env);
     expect(ciResponse.status).toBe(200);
@@ -230,6 +232,7 @@ describe("worker", () => {
     expect(llms).toContain("Compiler:");
     expect(llms).toContain("GitHub CI:");
     expect(llms).toContain("Install:");
+    expect(llms).toContain("POST /v1/demo/compile");
     expect(llms).toContain("POST /v1/lint");
 
     const indexNowResponse = await app.request(
@@ -471,6 +474,57 @@ describe("worker", () => {
     expect(compiled.remainingCredits).toBe(2);
     expect(compiled.providers[0]?.variants[0]?.key).toBe("responses_api");
     expect(compiled.providers[1]?.variants[0]?.key).toBe("generate_content");
+  });
+
+  it("returns a signed public demo compilation bundle without an API key", async () => {
+    const env: Bindings = {
+      ISSUER_SECRET: "test-secret"
+    };
+
+    const response = await app.request(
+      "http://example.test/v1/demo/compile",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          schema: {
+            type: "object",
+            properties: {
+              city: { type: "string" },
+              advisories: {
+                type: "array",
+                items: { type: "string" }
+              }
+            },
+            required: ["city", "advisories"],
+            additionalProperties: false
+          }
+        })
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const compiled = (await response.json()) as {
+      demo: boolean;
+      signature: string;
+      limits: {
+        maxBodyBytes: number;
+        maxSchemaBytes: number;
+      };
+      providers: Array<{ provider: string }>;
+    };
+
+    expect(compiled.demo).toBe(true);
+    expect(compiled.signature).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(compiled.limits.maxBodyBytes).toBe(12000);
+    expect(compiled.limits.maxSchemaBytes).toBe(6000);
+    expect(compiled.providers.map((provider) => provider.provider)).toEqual([
+      "openai",
+      "gemini"
+    ]);
   });
 
   it("claims stateless Polar access and uses it without KV storage", async () => {

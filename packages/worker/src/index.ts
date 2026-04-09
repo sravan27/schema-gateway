@@ -226,6 +226,23 @@ const PUBLIC_CORE_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_R
 const PUBLIC_SDK_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_RELEASE_TAG}/apex-value-schema-gateway-${PUBLIC_RELEASE_VERSION}.tgz`;
 const PUBLIC_INSTALL_COMMAND = `npm install ${PUBLIC_CORE_INSTALL_URL} ${PUBLIC_SDK_INSTALL_URL}`;
 const PUBLIC_ACTION_REF = PUBLIC_RELEASE_TAG;
+const DEMO_DEFAULT_TARGETS: SchemaPortabilityTarget[] = ["openai", "gemini"];
+const DEMO_MAX_BODY_BYTES = 12_000;
+const DEMO_MAX_SCHEMA_BYTES = 6_000;
+const DEMO_SAMPLE_SCHEMA = {
+  type: "object",
+  properties: {
+    city: { type: "string" },
+    temperatureC: { type: "number" },
+    condition: { type: "string" },
+    advisories: {
+      type: "array",
+      items: { type: "string" }
+    }
+  },
+  required: ["city", "temperatureC", "condition", "advisories"],
+  additionalProperties: false
+} satisfies Record<string, unknown>;
 const PUBLIC_CI_SNIPPET = `name: Schema portability
 
 on:
@@ -432,6 +449,99 @@ function renderSiteFooter(baseUrl: string): string {
 
 function renderCodeBlock(code: string): string {
   return `<pre><code>${escapeHtml(code)}</code></pre>`;
+}
+
+function renderCompilerDemoScript(baseUrl: string): string {
+  return `<script>
+(() => {
+  const form = document.getElementById("demo-compile-form");
+  const schemaField = document.getElementById("demo-schema");
+  const targetsField = document.getElementById("demo-targets");
+  const status = document.getElementById("demo-status");
+  const output = document.getElementById("demo-output");
+  const useSampleButton = document.getElementById("demo-use-sample");
+  const runButton = document.getElementById("demo-run");
+  const endpoint = ${JSON.stringify(`${baseUrl}/v1/demo/compile`)};
+  const sampleSchema = ${JSON.stringify(JSON.stringify(DEMO_SAMPLE_SCHEMA, null, 2))};
+
+  if (!(form instanceof HTMLFormElement) || !(schemaField instanceof HTMLTextAreaElement) || !(targetsField instanceof HTMLInputElement) || !(status instanceof HTMLElement) || !(output instanceof HTMLElement)) {
+    return;
+  }
+
+  function setStatus(message, variant) {
+    status.textContent = message;
+    status.dataset.variant = variant;
+  }
+
+  async function runDemo() {
+    let schema;
+
+    try {
+      schema = JSON.parse(schemaField.value);
+    } catch (error) {
+      setStatus("Schema JSON is invalid. Fix the syntax and try again.", "error");
+      output.textContent = error instanceof Error ? error.message : String(error);
+      return;
+    }
+
+    const targets = targetsField.value
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    runButton?.setAttribute("disabled", "disabled");
+    setStatus("Running the free hosted demo...", "loading");
+    output.textContent = "";
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          schema,
+          ...(targets.length > 0 ? { targets } : {})
+        })
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setStatus(payload.error ?? "The demo request failed.", "error");
+        output.textContent = JSON.stringify(payload, null, 2);
+        return;
+      }
+
+      const compatibleProviders = Array.isArray(payload.providers)
+        ? payload.providers.filter((provider) => provider.compatible).map((provider) => provider.provider)
+        : [];
+      setStatus(
+        compatibleProviders.length > 0
+          ? "Demo ready. Compatible providers: " + compatibleProviders.join(", ")
+          : "Demo ran. This schema still needs provider fixes before it is portable.",
+        "success"
+      );
+      output.textContent = JSON.stringify(payload, null, 2);
+    } catch (error) {
+      setStatus("Network error while calling the demo endpoint.", "error");
+      output.textContent = error instanceof Error ? error.message : String(error);
+    } finally {
+      runButton?.removeAttribute("disabled");
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await runDemo();
+  });
+
+  useSampleButton?.addEventListener("click", () => {
+    schemaField.value = sampleSchema;
+    targetsField.value = ${JSON.stringify(DEMO_DEFAULT_TARGETS.join(","))};
+    setStatus("Sample schema loaded. Run the free demo to see provider-ready output.", "idle");
+  });
+})();
+</script>`;
 }
 
 function renderMarketingPage(context: {
@@ -665,6 +775,58 @@ function renderMarketingPage(context: {
       .faq-item + .faq-item {
         margin-top: 16px;
       }
+      .form-grid {
+        display: grid;
+        gap: 14px;
+      }
+      .field {
+        display: grid;
+        gap: 8px;
+      }
+      .field-label {
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+      input,
+      textarea {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        padding: 14px 16px;
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--ink);
+        font: inherit;
+      }
+      textarea {
+        min-height: 260px;
+        font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+        font-size: 0.95rem;
+        line-height: 1.55;
+        resize: vertical;
+      }
+      button.primary,
+      button.secondary {
+        cursor: pointer;
+        border: 0;
+      }
+      button.primary[disabled],
+      button.secondary[disabled] {
+        opacity: 0.7;
+        cursor: progress;
+      }
+      .result-shell {
+        display: grid;
+        gap: 12px;
+      }
+      [data-variant="error"] {
+        color: #9f2b1c;
+      }
+      [data-variant="success"] {
+        color: #0b5d57;
+      }
+      [data-variant="loading"] {
+        color: #7c5f1b;
+      }
       @media (max-width: 840px) {
         .hero {
           grid-template-columns: 1fr;
@@ -737,6 +899,7 @@ function renderLandingPage(context: {
             malformed payloads, and return signed results for production pipelines.
           </p>
           <div class="actions">
+            <a class="primary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Run free live demo</a>
             ${checkoutMarkup}
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/compare">See provider comparisons</a>
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler">Compile provider payloads</a>
@@ -909,6 +1072,7 @@ function renderInstallPage(baseUrl: string): string {
 }
 
 function renderCompilerPage(baseUrl: string): string {
+  const demoSchema = JSON.stringify(DEMO_SAMPLE_SCHEMA, null, 2);
   return renderMarketingPage({
     baseUrl,
     path: "/compiler",
@@ -946,7 +1110,50 @@ function renderCompilerPage(baseUrl: string): string {
   -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}}},"targets":["openai","gemini"]}'`)}
           </div>
         </article>
-      </section>`
+      </section>
+      <section class="grid section" id="demo">
+        <article class="panel stack">
+          <div class="eyebrow">Free live demo</div>
+          <h2>Run the hosted compiler before you pay.</h2>
+          <p>
+            This public demo is intentionally constrained: compile only, small schemas, and no
+            API key. It exists to prove the value of the hosted compiler before a team buys the
+            signed API.
+          </p>
+          <form class="form-grid" id="demo-compile-form">
+            <label class="field" for="demo-targets">
+              <span class="field-label">Targets</span>
+              <input id="demo-targets" name="targets" value="${escapeHtml(DEMO_DEFAULT_TARGETS.join(","))}" spellcheck="false">
+            </label>
+            <label class="field" for="demo-schema">
+              <span class="field-label">Schema JSON</span>
+              <textarea id="demo-schema" name="schema" spellcheck="false">${escapeHtml(demoSchema)}</textarea>
+            </label>
+            <div class="actions">
+              <button class="primary" id="demo-run" type="submit">Run free demo</button>
+              <button class="secondary" id="demo-use-sample" type="button">Use sample schema</button>
+              <a class="secondary" href="${escapeHtml(baseUrl)}/pricing">Buy full API</a>
+            </div>
+          </form>
+        </article>
+        <article class="panel stack">
+          <div class="eyebrow">Live output</div>
+          <div class="result-shell">
+            <p class="meta" data-variant="idle" id="demo-status">
+              The demo endpoint compiles small schemas and signs the result so buyers can validate
+              the hosted path without installing anything.
+            </p>
+            <pre><code id="demo-output"></code></pre>
+          </div>
+          <p class="meta">
+            Demo limits: request body up to ${DEMO_MAX_BODY_BYTES.toLocaleString()} bytes, schema up
+            to ${DEMO_MAX_SCHEMA_BYTES.toLocaleString()} bytes, compile only. Paid access unlocks
+            signed shared endpoints for <code>/v1/compile</code>, <code>/v1/lint</code>, and
+            <code>/v1/normalize</code>.
+          </p>
+        </article>
+      </section>
+      ${renderCompilerDemoScript(baseUrl)}`
   });
 }
 
@@ -1191,6 +1398,18 @@ async function markRedemption(env: Bindings, marker: string): Promise<void> {
 
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
+}
+
+function countUtf8Bytes(value: string): number {
+  return new TextEncoder().encode(value).length;
+}
+
+function describeProviderSummary(
+  providers: Array<{ provider: string; compatible: boolean; score: number }>
+): string {
+  return providers
+    .map((provider) => `${provider.provider}:${provider.compatible ? "ok" : "fix"}:${provider.score}`)
+    .join("|");
 }
 
 function isStatelessPolarMode(env: Bindings): boolean {
@@ -1665,6 +1884,9 @@ Primary pages:
 Provider comparison pages:
 ${compareLines}
 
+Public demo endpoints:
+- POST /v1/demo/compile
+
 Primary paid endpoints:
 - POST /v1/compile
 - POST /v1/lint
@@ -1721,6 +1943,77 @@ app.get("/health", (context) => {
 
 app.get("/openapi.json", (context) => {
   return context.json(openApiDocument);
+});
+
+app.post("/v1/demo/compile", async (context) => {
+  const rawBody = await context.req.text();
+  if (countUtf8Bytes(rawBody) > DEMO_MAX_BODY_BYTES) {
+    return context.json(
+      {
+        error: `Demo requests are limited to ${DEMO_MAX_BODY_BYTES.toLocaleString()} bytes.`
+      },
+      413
+    );
+  }
+
+  let parsedBody: unknown;
+  try {
+    parsedBody = JSON.parse(rawBody);
+  } catch {
+    return context.json(
+      {
+        error: "The demo endpoint expects valid JSON."
+      },
+      400
+    );
+  }
+
+  const body = CompileBodySchema.parse(parsedBody);
+  const schemaBytes = countUtf8Bytes(JSON.stringify(body.schema));
+  if (schemaBytes > DEMO_MAX_SCHEMA_BYTES) {
+    return context.json(
+      {
+        error: `Demo schemas are limited to ${DEMO_MAX_SCHEMA_BYTES.toLocaleString()} bytes.`
+      },
+      413
+    );
+  }
+
+  const targets =
+    body.targets && body.targets.length > 0 ? body.targets : DEMO_DEFAULT_TARGETS;
+  const bundle = await compileStructuredOutputSchema({
+    schema: body.schema,
+    targets: targets as SchemaPortabilityTarget[],
+    ...(body.name ? { name: body.name } : {}),
+    ...(body.description ? { description: body.description } : {}),
+    ...(body.prompt ? { prompt: body.prompt } : {})
+  });
+  const signature = await createSignedEnvelope(context.env.ISSUER_SECRET, {
+    type: "demo_compile",
+    schemaHash: bundle.schemaHash,
+    name: bundle.name,
+    providers: describeProviderSummary(
+      bundle.providers.map((provider) => ({
+        provider: provider.provider,
+        compatible: provider.compatible,
+        score: provider.score
+      }))
+    ),
+    limits: {
+      maxBodyBytes: DEMO_MAX_BODY_BYTES,
+      maxSchemaBytes: DEMO_MAX_SCHEMA_BYTES
+    }
+  });
+
+  return context.json({
+    ...bundle,
+    demo: true,
+    signature,
+    limits: {
+      maxBodyBytes: DEMO_MAX_BODY_BYTES,
+      maxSchemaBytes: DEMO_MAX_SCHEMA_BYTES
+    }
+  });
 });
 
 app.post("/v1/webhooks/polar", async (context) => {

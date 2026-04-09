@@ -35,6 +35,57 @@ export const openApiDocument = {
         }
       }
     },
+    "/v1/demo/compile": {
+      post: {
+        summary: "Run the public compiler demo",
+        description:
+          "Compiles a small schema into provider-ready request fragments without an API key. Intended for interactive evaluation before purchase.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  schema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  targets: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["openai", "gemini", "anthropic", "ollama"]
+                    }
+                  },
+                  name: {
+                    type: "string"
+                  },
+                  description: {
+                    type: "string"
+                  },
+                  prompt: {
+                    type: "string"
+                  }
+                },
+                required: ["schema"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Signed demo compilation bundle"
+          },
+          "400": {
+            description: "Invalid JSON or request body"
+          },
+          "413": {
+            description: "Demo body or schema exceeded size limits"
+          }
+        }
+      }
+    },
     "/v1/access/redeem": {
       post: {
         summary: "Redeem an on-chain purchase receipt for an API key",

@@ -13,6 +13,7 @@ Live surfaces:
 - Site: [https://schema-gateway.sridharsravan.workers.dev](https://schema-gateway.sridharsravan.workers.dev)
 - Comparisons: [https://schema-gateway.sridharsravan.workers.dev/compare](https://schema-gateway.sridharsravan.workers.dev/compare)
 - Compiler: [https://schema-gateway.sridharsravan.workers.dev/compiler](https://schema-gateway.sridharsravan.workers.dev/compiler)
+- Free demo: [https://schema-gateway.sridharsravan.workers.dev/compiler#demo](https://schema-gateway.sridharsravan.workers.dev/compiler#demo)
 - GitHub CI: [https://schema-gateway.sridharsravan.workers.dev/ci](https://schema-gateway.sridharsravan.workers.dev/ci)
 - Install: [https://schema-gateway.sridharsravan.workers.dev/install](https://schema-gateway.sridharsravan.workers.dev/install)
 - Pricing: [https://schema-gateway.sridharsravan.workers.dev/pricing](https://schema-gateway.sridharsravan.workers.dev/pricing)
@@ -58,6 +59,7 @@ And an install page for release-tarball distribution:
 
 - GitHub release installer: `/install`
 - Schema compiler: `/compiler`
+- Live compiler demo: `/compiler#demo`
 - GitHub Action guide: `/ci`
 
 ## Billing Paths
@@ -100,6 +102,16 @@ schema-gateway compile --schema ./schema.json --target openai,gemini,anthropic,o
 ```
 
 The compiler emits provider-ready request fragments for OpenAI Responses, OpenAI Chat Completions, Gemini, Anthropic tools, and Ollama.
+
+You can also try the hosted compiler without buying anything first:
+
+```bash
+curl -X POST https://schema-gateway.sridharsravan.workers.dev/v1/demo/compile \
+  -H 'content-type: application/json' \
+  -d '{"schema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["city","temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'
+```
+
+The public demo is intentionally constrained to small compile-only requests. The paid API unlocks the signed shared endpoints for `/v1/compile`, `/v1/lint`, and `/v1/normalize`.
 
 When you want the same compiler through the hosted API with signed responses:
 
