@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { lintStructuredOutputSchema } from "../src/index.js";
+import { compileStructuredOutputSchema, lintStructuredOutputSchema } from "../src/index.js";
 
 describe("lintStructuredOutputSchema", () => {
   it("rewrites OpenAI schemas to strict-compatible required nullable objects", async () => {
@@ -57,5 +57,57 @@ describe("lintStructuredOutputSchema", () => {
     expect(gemini?.issues.some((issue) => issue.code === "gemini_property_ordering_added")).toBe(
       true
     );
+  });
+
+  it("compiles provider-ready request fragments from the normalized schema", async () => {
+    const bundle = await compileStructuredOutputSchema({
+      schema: {
+        type: "object",
+        properties: {
+          city: { type: "string" }
+        },
+        required: []
+      },
+      targets: ["openai", "gemini", "anthropic", "ollama"],
+      name: "Weather Response",
+      description: "Weather response payload"
+    });
+
+    expect(bundle.name).toBe("weather_response");
+
+    const openai = bundle.providers.find((provider) => provider.provider === "openai");
+    expect(openai?.variants[0]?.requestBody).toMatchObject({
+      text: {
+        format: {
+          type: "json_schema",
+          strict: true
+        }
+      }
+    });
+
+    const gemini = bundle.providers.find((provider) => provider.provider === "gemini");
+    expect(gemini?.variants[0]?.requestBody).toMatchObject({
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const anthropic = bundle.providers.find((provider) => provider.provider === "anthropic");
+    expect(anthropic?.variants[0]?.requestBody).toMatchObject({
+      tool_choice: {
+        type: "tool",
+        name: "weather_response"
+      }
+    });
+
+    const ollama = bundle.providers.find((provider) => provider.provider === "ollama");
+    expect(ollama?.variants[0]?.requestBody).toMatchObject({
+      format: {
+        type: "object"
+      },
+      options: {
+        temperature: 0
+      }
+    });
   });
 });

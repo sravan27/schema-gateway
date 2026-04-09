@@ -1,5 +1,8 @@
 import {
   buildLabelCommitment,
+  compileStructuredOutputSchema,
+  type CompileSchemaRequest,
+  type SchemaCompilationBundle,
   lintStructuredOutputSchema,
   type LintSchemaRequest,
   type SchemaPortabilityReport,
@@ -71,6 +74,10 @@ export class SchemaGatewayClient {
 
   lintLocal(request: LintSchemaRequest): Promise<SchemaPortabilityReport> {
     return lintStructuredOutputSchema(request);
+  }
+
+  compileLocal(request: CompileSchemaRequest): Promise<SchemaCompilationBundle> {
+    return compileStructuredOutputSchema(request);
   }
 
   async normalizeRemote(request: NormalizeRequest): Promise<NormalizationResult & {

@@ -1,7 +1,11 @@
 import { sha256Hex } from "./crypto.js";
 import type {
+  CompileSchemaRequest,
+  CompiledSchemaProvider,
   LintSchemaRequest,
   LintSeverity,
+  SchemaCompilationBundle,
+  SchemaCompileVariant,
   SchemaLintIssue,
   SchemaPortabilityReport,
   SchemaPortabilityTarget,
@@ -33,6 +37,16 @@ const GEMINI_SOFT_UNSUPPORTED_KEYWORDS = new Set([
 
 function cloneSchema<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function slugifySchemaName(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return normalized.length > 0 ? normalized : "schema_gateway_output";
 }
 
 function addIssue(
@@ -491,5 +505,186 @@ export async function lintStructuredOutputSchema(
   return {
     schemaHash: await sha256Hex(request.schema),
     providers: reports
+  };
+}
+
+function buildCompileVariants(
+  providerReport: SchemaProviderReport,
+  context: {
+    name: string;
+    description: string;
+    prompt: string;
+  }
+): { variants: SchemaCompileVariant[]; notes: string[] } {
+  const { normalizedSchema, provider } = providerReport;
+
+  switch (provider) {
+    case "openai":
+      return {
+        variants: [
+          {
+            key: "responses_api",
+            label: "OpenAI Responses API",
+            requestBody: {
+              input: context.prompt,
+              text: {
+                format: {
+                  type: "json_schema",
+                  strict: true,
+                  schema: normalizedSchema
+                }
+              }
+            }
+          },
+          {
+            key: "chat_completions",
+            label: "OpenAI Chat Completions API",
+            requestBody: {
+              messages: [
+                {
+                  role: "user",
+                  content: context.prompt
+                }
+              ],
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: context.name,
+                  strict: true,
+                  schema: normalizedSchema
+                }
+              }
+            }
+          }
+        ],
+        notes: [
+          "Use the normalized schema fragment below instead of the raw schema when targeting OpenAI strict mode.",
+          "If your team still uses Chat Completions, the second variant preserves the `name` wrapper expected by the legacy response format shape."
+        ]
+      };
+    case "gemini":
+      return {
+        variants: [
+          {
+            key: "generate_content",
+            label: "Gemini generateContent",
+            requestBody: {
+              contents: [
+                {
+                  parts: [
+                    {
+                      text: context.prompt
+                    }
+                  ]
+                }
+              ],
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseJsonSchema: normalizedSchema
+              }
+            }
+          }
+        ],
+        notes: [
+          "Gemini expects JSON schema under `responseJsonSchema` with `responseMimeType: application/json`.",
+          "Schema Gateway preserves Gemini-friendly property ordering so structured outputs stay stable across model upgrades."
+        ]
+      };
+    case "anthropic":
+      return {
+        variants: [
+          {
+            key: "messages_tools",
+            label: "Anthropic Messages API tool definition",
+            requestBody: {
+              messages: [
+                {
+                  role: "user",
+                  content: context.prompt
+                }
+              ],
+              tools: [
+                {
+                  name: context.name,
+                  description: context.description,
+                  input_schema: normalizedSchema
+                }
+              ],
+              tool_choice: {
+                type: "tool",
+                name: context.name
+              }
+            }
+          }
+        ],
+        notes: [
+          "Prefer Anthropic's native tool definitions when you need schema control.",
+          "Schema Gateway still warns if you rely on Anthropic's OpenAI compatibility layer because `strict` is ignored there."
+        ]
+      };
+    case "ollama":
+      return {
+        variants: [
+          {
+            key: "chat",
+            label: "Ollama chat",
+            requestBody: {
+              messages: [
+                {
+                  role: "user",
+                  content: context.prompt
+                }
+              ],
+              format: normalizedSchema,
+              stream: false,
+              options: {
+                temperature: 0
+              }
+            }
+          }
+        ],
+        notes: [
+          "Ollama structured outputs are most reliable when the prompt explicitly asks for JSON matching the schema.",
+          "Use a low temperature such as 0 for deterministic local extraction."
+        ]
+      };
+  }
+}
+
+export async function compileStructuredOutputSchema(
+  request: CompileSchemaRequest
+): Promise<SchemaCompilationBundle> {
+  const report = await lintStructuredOutputSchema(request);
+  const name = slugifySchemaName(request.name ?? "schema_gateway_output");
+  const description =
+    request.description?.trim() || "Structured output generated by Schema Gateway.";
+  const prompt =
+    request.prompt?.trim() ||
+    "Return only JSON that matches the provided schema with no extra commentary.";
+
+  const providers = report.providers.map<CompiledSchemaProvider>((providerReport) => {
+    const { variants, notes } = buildCompileVariants(providerReport, {
+      name,
+      description,
+      prompt
+    });
+
+    return {
+      provider: providerReport.provider,
+      compatible: providerReport.compatible,
+      score: providerReport.score,
+      normalizedSchema: providerReport.normalizedSchema,
+      issues: providerReport.issues,
+      variants,
+      notes
+    };
+  });
+
+  return {
+    schemaHash: report.schemaHash,
+    name,
+    description,
+    prompt,
+    providers
   };
 }

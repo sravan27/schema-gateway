@@ -12,6 +12,8 @@ Live surfaces:
 
 - Site: [https://schema-gateway.sridharsravan.workers.dev](https://schema-gateway.sridharsravan.workers.dev)
 - Comparisons: [https://schema-gateway.sridharsravan.workers.dev/compare](https://schema-gateway.sridharsravan.workers.dev/compare)
+- Compiler: [https://schema-gateway.sridharsravan.workers.dev/compiler](https://schema-gateway.sridharsravan.workers.dev/compiler)
+- GitHub CI: [https://schema-gateway.sridharsravan.workers.dev/ci](https://schema-gateway.sridharsravan.workers.dev/ci)
 - Install: [https://schema-gateway.sridharsravan.workers.dev/install](https://schema-gateway.sridharsravan.workers.dev/install)
 - Pricing: [https://schema-gateway.sridharsravan.workers.dev/pricing](https://schema-gateway.sridharsravan.workers.dev/pricing)
 - OpenAPI: [https://schema-gateway.sridharsravan.workers.dev/openapi.json](https://schema-gateway.sridharsravan.workers.dev/openapi.json)
@@ -21,8 +23,8 @@ Install the current SDK release without waiting for npm:
 
 ```bash
 npm install \
-  https://github.com/sravan27/schema-gateway/releases/download/v0.1.1/apex-value-schema-gateway-core-0.1.1.tgz \
-  https://github.com/sravan27/schema-gateway/releases/download/v0.1.1/apex-value-schema-gateway-0.1.1.tgz
+  https://github.com/sravan27/schema-gateway/releases/download/v0.1.2/apex-value-schema-gateway-core-0.1.2.tgz \
+  https://github.com/sravan27/schema-gateway/releases/download/v0.1.2/apex-value-schema-gateway-0.1.2.tgz
 ```
 
 ## Why this wedge
@@ -55,6 +57,8 @@ It also ships indexable comparison pages for:
 And an install page for release-tarball distribution:
 
 - GitHub release installer: `/install`
+- Schema compiler: `/compiler`
+- GitHub Action guide: `/ci`
 
 ## Billing Paths
 
@@ -92,7 +96,10 @@ Or use the CLI:
 schema-gateway validate --schema ./schema.json --payload ./payload.json
 schema-gateway commitment --label router-service
 schema-gateway lint --schema ./schema.json --target openai,gemini
+schema-gateway compile --schema ./schema.json --target openai,gemini,anthropic,ollama --name extraction_result
 ```
+
+The compiler emits provider-ready request fragments for OpenAI Responses, OpenAI Chat Completions, Gemini, Anthropic tools, and Ollama.
 
 Provider-specific examples live in:
 
@@ -110,6 +117,42 @@ const report = await client.lintLocal({
   schema,
   targets: ["openai", "gemini", "anthropic", "ollama"]
 });
+```
+
+To generate copy-paste request fragments from the same schema:
+
+```ts
+import { SchemaGatewayClient } from "@apex-value/schema-gateway";
+
+const client = new SchemaGatewayClient();
+const bundle = await client.compileLocal({
+  schema,
+  targets: ["openai", "gemini", "anthropic", "ollama"],
+  name: "extraction_result"
+});
+```
+
+## GitHub Action
+
+Schema Gateway also ships a reusable GitHub Action that lints a schema in CI and writes a job summary with top issues plus the first generated provider snippet:
+
+```yaml
+name: Schema portability
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: sravan27/schema-gateway/.github/actions/portability-check@v0.1.2
+        with:
+          schema: schema.json
+          targets: openai,gemini,anthropic,ollama
 ```
 
 When you need signed responses and prepaid credits, generate the same label commitment locally, buy credits on-chain with that commitment, then redeem the resulting transaction for a key:

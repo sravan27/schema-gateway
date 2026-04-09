@@ -21,6 +21,12 @@ export interface LintSchemaRequest {
   targets?: SchemaPortabilityTarget[];
 }
 
+export interface CompileSchemaRequest extends LintSchemaRequest {
+  name?: string;
+  description?: string;
+  prompt?: string;
+}
+
 export interface NormalizedToolCall {
   name: string;
   arguments: Record<string, unknown>;
@@ -54,6 +60,30 @@ export interface SchemaProviderReport {
 export interface SchemaPortabilityReport {
   schemaHash: `0x${string}`;
   providers: SchemaProviderReport[];
+}
+
+export interface SchemaCompileVariant {
+  key: string;
+  label: string;
+  requestBody: Record<string, unknown>;
+}
+
+export interface CompiledSchemaProvider {
+  provider: SchemaPortabilityTarget;
+  compatible: boolean;
+  score: number;
+  normalizedSchema: Record<string, unknown>;
+  issues: SchemaLintIssue[];
+  variants: SchemaCompileVariant[];
+  notes: string[];
+}
+
+export interface SchemaCompilationBundle {
+  schemaHash: `0x${string}`;
+  name: string;
+  description: string;
+  prompt: string;
+  providers: CompiledSchemaProvider[];
 }
 
 export interface NormalizationResult {

@@ -7,7 +7,7 @@ import type { SchemaPortabilityTarget, SupportedProvider } from "@apex-value/sch
 
 import { buildPurchaseMetadata, SchemaGatewayClient } from "./index.js";
 
-type Command = "validate" | "redeem" | "commitment" | "lint" | "claim";
+type Command = "validate" | "redeem" | "commitment" | "lint" | "claim" | "compile";
 
 interface CliOptions {
   [key: string]: string | boolean | undefined;
@@ -20,6 +20,7 @@ function usage(): string {
     "  schema-gateway validate --schema ./schema.json --payload ./payload.txt --remote --api-key sk_live... [--base-url https://worker.example]",
     "  schema-gateway lint --schema ./schema.json [--target openai,gemini]",
     "  schema-gateway lint --schema ./schema.json --remote --api-key sk_live... [--base-url https://worker.example]",
+    "  schema-gateway compile --schema ./schema.json [--target openai,gemini] [--name weather_response]",
     "  schema-gateway claim --order-id polar_order... --email you@example.com [--base-url https://worker.example]",
     "  schema-gateway redeem --tx-hash 0x... --label router-service [--base-url https://worker.example]",
     "  schema-gateway commitment --label router-service",
@@ -32,6 +33,9 @@ function usage(): string {
     "  --api-key    API key for remote normalization",
     "  --base-url   Worker base URL",
     "  --target     Comma-separated portability targets: openai, gemini, anthropic, ollama",
+    "  --name       Schema/tool name used in generated provider snippets",
+    "  --prompt     User prompt text to embed in generated request snippets",
+    "  --description Tool/schema description for generated provider snippets",
     "  --order-id   Polar order ID for access claiming",
     "  --email      Buyer email for Polar access claiming",
     "  --tx-hash    Purchase transaction hash for key redemption",
@@ -65,7 +69,8 @@ function parseArgs(argv: string[]): { command: Command | null; options: CliOptio
     commandToken === "redeem" ||
     commandToken === "commitment" ||
     commandToken === "lint" ||
-    commandToken === "claim"
+    commandToken === "claim" ||
+    commandToken === "compile"
   ) {
     return { command: commandToken, options };
   }
@@ -173,6 +178,31 @@ async function runLint(options: CliOptions): Promise<void> {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
+async function runCompile(options: CliOptions): Promise<void> {
+  const schemaPath = options.schema;
+
+  if (typeof schemaPath !== "string") {
+    throw new Error("`compile` requires --schema.");
+  }
+
+  const schemaRaw = await readFileOrStdin(schemaPath);
+  const schema = JSON.parse(schemaRaw) as Record<string, unknown>;
+  const targets = parseTargets(options.target);
+
+  const client = new SchemaGatewayClient();
+  const result = await client.compileLocal({
+    schema,
+    ...(targets ? { targets } : {}),
+    ...(typeof options.name === "string" ? { name: options.name } : {}),
+    ...(typeof options.prompt === "string" ? { prompt: options.prompt } : {}),
+    ...(typeof options.description === "string"
+      ? { description: options.description }
+      : {})
+  });
+
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
 async function runRedeem(options: CliOptions): Promise<void> {
   const txHash = options["tx-hash"];
   const label = options.label;
@@ -239,6 +269,9 @@ async function main(): Promise<void> {
       break;
     case "claim":
       await runClaim(options);
+      break;
+    case "compile":
+      await runCompile(options);
       break;
   }
 }

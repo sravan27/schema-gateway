@@ -211,11 +211,32 @@ type ComparePage = {
 
 const PUBLIC_REPO_URL = "https://github.com/sravan27/schema-gateway";
 const PUBLIC_INDEXNOW_KEY = "0d712c316dcc009314c1cddfefaad8a2";
-const PUBLIC_RELEASE_VERSION = "0.1.1";
+const PUBLIC_RELEASE_VERSION = "0.1.2";
 const PUBLIC_RELEASE_TAG = `v${PUBLIC_RELEASE_VERSION}`;
 const PUBLIC_CORE_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_RELEASE_TAG}/apex-value-schema-gateway-core-${PUBLIC_RELEASE_VERSION}.tgz`;
 const PUBLIC_SDK_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_RELEASE_TAG}/apex-value-schema-gateway-${PUBLIC_RELEASE_VERSION}.tgz`;
 const PUBLIC_INSTALL_COMMAND = `npm install ${PUBLIC_CORE_INSTALL_URL} ${PUBLIC_SDK_INSTALL_URL}`;
+const PUBLIC_ACTION_REF = PUBLIC_RELEASE_TAG;
+const PUBLIC_CI_SNIPPET = `name: Schema portability
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check-schema:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: sravan27/schema-gateway/.github/actions/portability-check@${PUBLIC_ACTION_REF}
+        with:
+          schema: schema.json
+          targets: openai,gemini,anthropic,ollama`;
+const PUBLIC_COMPILE_SNIPPET = `schema-gateway compile \\
+  --schema ./schema.json \\
+  --target openai,gemini,anthropic,ollama \\
+  --name extraction_result`;
 const ROOT_FAQ = [
   {
     question: "What problem does Schema Gateway solve?",
@@ -374,6 +395,8 @@ function renderSiteNav(baseUrl: string): string {
     <a class="brand" href="${escapeHtml(baseUrl)}/">Schema Gateway</a>
     <div class="nav-links">
       <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
+      <a href="${escapeHtml(baseUrl)}/compiler">Compiler</a>
+      <a href="${escapeHtml(baseUrl)}/ci">CI</a>
       <a href="${escapeHtml(baseUrl)}/install">Install</a>
       <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
       <a href="${escapeHtml(baseUrl)}/openapi.json">OpenAPI</a>
@@ -388,6 +411,8 @@ function renderSiteFooter(baseUrl: string): string {
     <div class="footer-links">
       <a href="${escapeHtml(baseUrl)}/">Home</a>
       <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
+      <a href="${escapeHtml(baseUrl)}/compiler">Compiler</a>
+      <a href="${escapeHtml(baseUrl)}/ci">CI</a>
       <a href="${escapeHtml(baseUrl)}/install">Install</a>
       <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
       <a href="${escapeHtml(baseUrl)}/llms.txt">llms.txt</a>
@@ -705,6 +730,7 @@ function renderLandingPage(context: {
           <div class="actions">
             ${checkoutMarkup}
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/compare">See provider comparisons</a>
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler">Compile provider payloads</a>
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install from GitHub</a>
             <a class="secondary" href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
           </div>
@@ -721,6 +747,8 @@ function renderLandingPage(context: {
           <ul class="list">
             <li>Free local CLI and SDK for schema validation and JSON repair</li>
             <li>Portable schema linting across OpenAI, Gemini, Anthropic, and Ollama</li>
+            <li>Schema compiler that generates provider-ready request fragments</li>
+            <li>Reusable GitHub Action for CI summaries on every pull request</li>
             <li>Paid stateless access claims via Polar when you need a shared API</li>
           </ul>
           <div class="section">
@@ -792,6 +820,24 @@ schema-gateway lint --schema ./schema.json --target openai,gemini,anthropic,olla
   -d '{"orderId":"polar_order_id","email":"you@example.com"}'`)}
         </article>
       </section>
+      <section class="grid section">
+        <article class="panel">
+          <h2>Schema compiler</h2>
+          <p>Generate provider-ready request fragments instead of manually translating JSON Schema into four different SDK shapes.</p>
+          ${renderCodeBlock(PUBLIC_COMPILE_SNIPPET)}
+          <div class="actions">
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler">Open compiler guide</a>
+          </div>
+        </article>
+        <article class="panel">
+          <h2>GitHub CI check</h2>
+          <p>Drop Schema Gateway into CI and get a job summary with compatibility scores, top issues, and a generated request snippet.</p>
+          ${renderCodeBlock(PUBLIC_CI_SNIPPET)}
+          <div class="actions">
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/ci">Open CI guide</a>
+          </div>
+        </article>
+      </section>
       <section class="panel section" id="faq">
         <h2>FAQ</h2>
         ${ROOT_FAQ.map(
@@ -847,6 +893,76 @@ function renderInstallPage(baseUrl: string): string {
             <li>Use the local CLI for free validation and repair.</li>
             <li>Buy starter access when you need the shared API and signed remote reports.</li>
             <li>Claim a key from a Polar order via <code>POST /v1/access/polar/claim</code>.</li>
+          </ul>
+        </article>
+      </section>`
+  });
+}
+
+function renderCompilerPage(baseUrl: string): string {
+  return renderMarketingPage({
+    baseUrl,
+    path: "/compiler",
+    title: "Schema Gateway Compiler | Generate provider-ready payloads",
+    description:
+      "Compile one JSON schema into provider-ready request fragments for OpenAI, Gemini, Anthropic, and Ollama.",
+    body: `<section class="grid">
+        <article class="panel stack">
+          <div class="eyebrow">Schema compiler</div>
+          <h1>Turn one schema into provider-ready request payloads.</h1>
+          <p>
+            The compiler takes the same normalized schema report and emits request fragments you can
+            paste into OpenAI, Gemini, Anthropic, or Ollama integrations without hand-translating
+            each provider's request shape.
+          </p>
+          ${renderCodeBlock(PUBLIC_COMPILE_SNIPPET)}
+          <div class="actions">
+            <a class="primary" href="${escapeHtml(baseUrl)}/install">Install the CLI</a>
+            <a class="secondary" href="${escapeHtml(PUBLIC_REPO_URL)}/releases/tag/${PUBLIC_RELEASE_TAG}">Open release ${escapeHtml(PUBLIC_RELEASE_TAG)}</a>
+          </div>
+        </article>
+        <article class="panel stack">
+          <div class="eyebrow">What comes out</div>
+          <ul class="list">
+            <li>OpenAI Responses and Chat Completions fragments</li>
+            <li>Gemini <code>generationConfig.responseJsonSchema</code> payloads</li>
+            <li>Anthropic native <code>tools</code> definitions instead of compatibility guesswork</li>
+            <li>Ollama <code>format</code> plus deterministic <code>temperature: 0</code> hints</li>
+          </ul>
+        </article>
+      </section>`
+  });
+}
+
+function renderCiPage(baseUrl: string): string {
+  return renderMarketingPage({
+    baseUrl,
+    path: "/ci",
+    title: "Schema Gateway CI | GitHub Action for structured outputs",
+    description:
+      "Use Schema Gateway as a GitHub Action to lint schemas in CI and publish provider portability summaries on every workflow run.",
+    body: `<section class="grid">
+        <article class="panel stack">
+          <div class="eyebrow">GitHub Action</div>
+          <h1>Run Schema Gateway on every pull request.</h1>
+          <p>
+            The free GitHub Action lints one schema across provider targets, writes a job summary,
+            and surfaces the first generated request snippet so teams can fix breakage before it
+            lands in production.
+          </p>
+          ${renderCodeBlock(PUBLIC_CI_SNIPPET)}
+          <div class="actions">
+            <a class="primary" href="${escapeHtml(PUBLIC_REPO_URL)}/tree/${escapeHtml(PUBLIC_ACTION_REF)}/.github/actions/portability-check">View action source</a>
+            <a class="secondary" href="${escapeHtml(baseUrl)}/compiler">See compiler output</a>
+          </div>
+        </article>
+        <article class="panel stack">
+          <div class="eyebrow">Job summary output</div>
+          <ul class="list">
+            <li>Compatibility status per provider</li>
+            <li>Error, warning, and info counts</li>
+            <li>Top schema issues with codes</li>
+            <li>A generated request snippet for the first provider variant</li>
           </ul>
         </article>
       </section>`
@@ -1473,6 +1589,16 @@ app.get("/compare/:slug", (context) => {
   return context.html(renderComparePage(baseUrl, page));
 });
 
+app.get("/compiler", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(renderCompilerPage(baseUrl));
+});
+
+app.get("/ci", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(renderCiPage(baseUrl));
+});
+
 app.get("/install", (context) => {
   const baseUrl = new URL(context.req.url).origin;
   return context.html(renderInstallPage(baseUrl));
@@ -1513,6 +1639,8 @@ Schema Gateway is a developer API for structured output portability across OpenA
 Primary pages:
 - Home: ${baseUrl}/
 - Comparisons: ${baseUrl}/compare
+- Compiler: ${baseUrl}/compiler
+- GitHub CI: ${baseUrl}/ci
 - Install: ${baseUrl}/install
 - Pricing: ${baseUrl}/pricing
 - OpenAPI: ${baseUrl}/openapi.json
@@ -1537,6 +1665,8 @@ app.get("/sitemap.xml", (context) => {
   const routes = [
     "/",
     "/compare",
+    "/compiler",
+    "/ci",
     "/install",
     "/pricing",
     ...COMPARE_PAGES.map((page) => `/compare/${page.slug}`)

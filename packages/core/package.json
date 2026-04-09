@@ -1,6 +1,6 @@
 {
   "name": "@apex-value/schema-gateway-core",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Core schema normalization, repair, and signing helpers for Schema Gateway.",
   "license": "MIT",
   "type": "module",
