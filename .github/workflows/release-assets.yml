@@ -1,0 +1,26 @@
+name: Release Assets
+
+on:
+  release:
+    types:
+      - published
+
+jobs:
+  pack:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: mkdir -p release-assets
+      - run: npm pack -w packages/core --pack-destination ./release-assets
+      - run: npm pack -w packages/sdk --pack-destination ./release-assets
+      - run: gh release upload ${{ github.event.release.tag_name }} release-assets/*.tgz --clobber
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

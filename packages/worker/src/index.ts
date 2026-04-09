@@ -210,6 +210,12 @@ type ComparePage = {
 };
 
 const PUBLIC_REPO_URL = "https://github.com/sravan27/schema-gateway";
+const PUBLIC_INDEXNOW_KEY = "0d712c316dcc009314c1cddfefaad8a2";
+const PUBLIC_RELEASE_VERSION = "0.1.1";
+const PUBLIC_RELEASE_TAG = `v${PUBLIC_RELEASE_VERSION}`;
+const PUBLIC_CORE_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_RELEASE_TAG}/apex-value-schema-gateway-core-${PUBLIC_RELEASE_VERSION}.tgz`;
+const PUBLIC_SDK_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_RELEASE_TAG}/apex-value-schema-gateway-${PUBLIC_RELEASE_VERSION}.tgz`;
+const PUBLIC_INSTALL_COMMAND = `npm install ${PUBLIC_CORE_INSTALL_URL} ${PUBLIC_SDK_INSTALL_URL}`;
 const ROOT_FAQ = [
   {
     question: "What problem does Schema Gateway solve?",
@@ -368,6 +374,7 @@ function renderSiteNav(baseUrl: string): string {
     <a class="brand" href="${escapeHtml(baseUrl)}/">Schema Gateway</a>
     <div class="nav-links">
       <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
+      <a href="${escapeHtml(baseUrl)}/install">Install</a>
       <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
       <a href="${escapeHtml(baseUrl)}/openapi.json">OpenAPI</a>
       <a href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
@@ -381,6 +388,7 @@ function renderSiteFooter(baseUrl: string): string {
     <div class="footer-links">
       <a href="${escapeHtml(baseUrl)}/">Home</a>
       <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
+      <a href="${escapeHtml(baseUrl)}/install">Install</a>
       <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
       <a href="${escapeHtml(baseUrl)}/llms.txt">llms.txt</a>
       <a href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
@@ -697,6 +705,7 @@ function renderLandingPage(context: {
           <div class="actions">
             ${checkoutMarkup}
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/compare">See provider comparisons</a>
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install from GitHub</a>
             <a class="secondary" href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
           </div>
           <div class="pill-row">
@@ -770,8 +779,9 @@ function renderLandingPage(context: {
       <section class="grid section">
         <article class="panel">
           <h2>Free local workflow</h2>
-          <p>Developers can lint and validate locally before buying anything.</p>
-          ${renderCodeBlock(`schema-gateway validate --schema ./schema.json --payload ./payload.json
+          <p>Developers can lint and validate locally before buying anything, even before npm auth exists.</p>
+          ${renderCodeBlock(`${PUBLIC_INSTALL_COMMAND}
+schema-gateway validate --schema ./schema.json --payload ./payload.json
 schema-gateway lint --schema ./schema.json --target openai,gemini,anthropic,ollama`)}
         </article>
         <article class="panel">
@@ -790,6 +800,55 @@ schema-gateway lint --schema ./schema.json --target openai,gemini,anthropic,olla
               <p>${escapeHtml(item.answer)}</p>
             </div>`
         ).join("")}
+      </section>`
+  });
+}
+
+function renderInstallPage(baseUrl: string): string {
+  return renderMarketingPage({
+    baseUrl,
+    path: "/install",
+    title: "Install Schema Gateway from GitHub Releases",
+    description:
+      "Install Schema Gateway directly from a public GitHub release tarball. No npm registry login or paid marketplace account required.",
+    body: `<section class="grid">
+        <article class="panel stack">
+          <div class="eyebrow">GitHub-first distribution</div>
+          <h1>Install Schema Gateway straight from the public release.</h1>
+          <p>
+            Schema Gateway is installable today without waiting for npm publishing. Install the
+            public core and SDK release tarballs in one npm command and start linting locally.
+          </p>
+          ${renderCodeBlock(PUBLIC_INSTALL_COMMAND)}
+          <div class="actions">
+            <a class="primary" href="${escapeHtml(PUBLIC_REPO_URL)}/releases/tag/${PUBLIC_RELEASE_TAG}">Open release assets</a>
+            <a class="secondary" href="${escapeHtml(PUBLIC_REPO_URL)}/releases/tag/${PUBLIC_RELEASE_TAG}">View release ${escapeHtml(PUBLIC_RELEASE_TAG)}</a>
+          </div>
+        </article>
+        <article class="panel stack">
+          <div class="eyebrow">Quick check</div>
+          <h2>Run a real portability lint immediately.</h2>
+          ${renderCodeBlock(`schema-gateway lint --schema ./schema.json --target openai,gemini,anthropic,ollama`)}
+          <p class="meta">Current installer: <code>${escapeHtml(PUBLIC_SDK_INSTALL_URL)}</code></p>
+        </article>
+      </section>
+      <section class="grid section">
+        <article class="panel">
+          <h2>Why this matters</h2>
+          <ul class="list">
+            <li>No npm auth is required to evaluate the product locally.</li>
+            <li>Two public release assets install cleanly in a single npm command.</li>
+            <li>Teams can test the free workflow before buying the remote API.</li>
+          </ul>
+        </article>
+        <article class="panel">
+          <h2>Upgrade path</h2>
+          <ul class="list">
+            <li>Use the local CLI for free validation and repair.</li>
+            <li>Buy starter access when you need the shared API and signed remote reports.</li>
+            <li>Claim a key from a Polar order via <code>POST /v1/access/polar/claim</code>.</li>
+          </ul>
+        </article>
       </section>`
   });
 }
@@ -907,11 +966,14 @@ function renderPricingPage(context: {
           <ul class="list">
             <li>Local schema validation and JSON repair</li>
             <li>Provider-portability linting in the CLI and SDK</li>
-            <li>No checkout needed for local use</li>
+            <li>Installable from a public GitHub release with no npm auth</li>
           </ul>
           <div class="section">
-            ${renderCodeBlock(`npm install
+            ${renderCodeBlock(`${PUBLIC_INSTALL_COMMAND}
 schema-gateway lint --schema ./schema.json --target openai,gemini`)}
+          </div>
+          <div class="actions">
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install guide</a>
           </div>
         </article>
         <article class="panel">
@@ -1411,6 +1473,11 @@ app.get("/compare/:slug", (context) => {
   return context.html(renderComparePage(baseUrl, page));
 });
 
+app.get("/install", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(renderInstallPage(baseUrl));
+});
+
 app.get("/pricing", (context) => {
   const baseUrl = new URL(context.req.url).origin;
   return context.html(
@@ -1446,6 +1513,7 @@ Schema Gateway is a developer API for structured output portability across OpenA
 Primary pages:
 - Home: ${baseUrl}/
 - Comparisons: ${baseUrl}/compare
+- Install: ${baseUrl}/install
 - Pricing: ${baseUrl}/pricing
 - OpenAPI: ${baseUrl}/openapi.json
 
@@ -1466,7 +1534,13 @@ Primary paid endpoints:
 
 app.get("/sitemap.xml", (context) => {
   const baseUrl = new URL(context.req.url).origin;
-  const routes = ["/", "/compare", "/pricing", ...COMPARE_PAGES.map((page) => `/compare/${page.slug}`)];
+  const routes = [
+    "/",
+    "/compare",
+    "/install",
+    "/pricing",
+    ...COMPARE_PAGES.map((page) => `/compare/${page.slug}`)
+  ];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${routes
@@ -1480,6 +1554,12 @@ ${routes
 
   return context.text(xml, 200, {
     "content-type": "application/xml; charset=utf-8"
+  });
+});
+
+app.get(`/${PUBLIC_INDEXNOW_KEY}.txt`, (context) => {
+  return context.text(PUBLIC_INDEXNOW_KEY, 200, {
+    "content-type": "text/plain; charset=utf-8"
   });
 });
 

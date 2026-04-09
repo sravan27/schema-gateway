@@ -12,9 +12,18 @@ Live surfaces:
 
 - Site: [https://schema-gateway.sridharsravan.workers.dev](https://schema-gateway.sridharsravan.workers.dev)
 - Comparisons: [https://schema-gateway.sridharsravan.workers.dev/compare](https://schema-gateway.sridharsravan.workers.dev/compare)
+- Install: [https://schema-gateway.sridharsravan.workers.dev/install](https://schema-gateway.sridharsravan.workers.dev/install)
 - Pricing: [https://schema-gateway.sridharsravan.workers.dev/pricing](https://schema-gateway.sridharsravan.workers.dev/pricing)
 - OpenAPI: [https://schema-gateway.sridharsravan.workers.dev/openapi.json](https://schema-gateway.sridharsravan.workers.dev/openapi.json)
 - Checkout: [https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK)
+
+Install the current SDK release without waiting for npm:
+
+```bash
+npm install \
+  https://github.com/sravan27/schema-gateway/releases/download/v0.1.1/apex-value-schema-gateway-core-0.1.1.tgz \
+  https://github.com/sravan27/schema-gateway/releases/download/v0.1.1/apex-value-schema-gateway-0.1.1.tgz
+```
 
 ## Why this wedge
 
@@ -42,6 +51,10 @@ It also ships indexable comparison pages for:
 - Gemini structured output: `/compare/gemini-structured-output`
 - Anthropic compatibility: `/compare/anthropic-openai-compat`
 - Ollama structured outputs: `/compare/ollama-structured-outputs`
+
+And an install page for release-tarball distribution:
+
+- GitHub release installer: `/install`
 
 ## Billing Paths
 

@@ -174,13 +174,21 @@ describe("worker", () => {
     expect(html).toContain("https://buy.polar.sh/test-checkout");
     expect(html).toContain("founder@example.com");
     expect(html).toContain("/compare");
+    expect(html).toContain("/install");
     expect(html).toContain("/pricing");
   });
 
-  it("serves provider comparison and crawl files", async () => {
+  it("serves install, provider comparison, and crawl files", async () => {
     const env: Bindings = {
       ISSUER_SECRET: "test-secret"
     };
+
+    const installResponse = await app.request("http://example.test/install", {}, env);
+    expect(installResponse.status).toBe(200);
+    const installHtml = await installResponse.text();
+    expect(installHtml).toContain("Install Schema Gateway straight from the public release");
+    expect(installHtml).toContain("apex-value-schema-gateway-core-0.1.1.tgz");
+    expect(installHtml).toContain("apex-value-schema-gateway-0.1.1.tgz");
 
     const compareResponse = await app.request(
       "http://example.test/compare/openai-structured-outputs",
@@ -196,13 +204,23 @@ describe("worker", () => {
     expect(sitemapResponse.status).toBe(200);
     const sitemap = await sitemapResponse.text();
     expect(sitemap).toContain("/compare/openai-structured-outputs");
+    expect(sitemap).toContain("/install");
     expect(sitemap).toContain("/pricing");
 
     const llmsResponse = await app.request("http://example.test/llms.txt", {}, env);
     expect(llmsResponse.status).toBe(200);
     const llms = await llmsResponse.text();
     expect(llms).toContain("Provider comparison pages");
+    expect(llms).toContain("Install:");
     expect(llms).toContain("POST /v1/lint");
+
+    const indexNowResponse = await app.request(
+      "http://example.test/0d712c316dcc009314c1cddfefaad8a2.txt",
+      {},
+      env
+    );
+    expect(indexNowResponse.status).toBe(200);
+    expect(await indexNowResponse.text()).toBe("0d712c316dcc009314c1cddfefaad8a2");
   });
 
   it("returns a signed schema portability report and spends one credit", async () => {

@@ -2,7 +2,7 @@ export const openApiDocument = {
   openapi: "3.1.0",
   info: {
     title: "Schema Gateway API",
-    version: "0.1.0",
+    version: "0.1.1",
     description:
       "Prepaid machine-to-machine API for structured output normalization, repair, and signed responses."
   },
