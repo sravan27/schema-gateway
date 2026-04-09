@@ -488,10 +488,10 @@ function renderCompilerDemoScript(baseUrl: string): string {
 
   function stringifyPreview(value) {
     const raw = JSON.stringify(value, null, 2);
-    if (raw.length <= 560) {
+    if (raw.length <= 900) {
       return raw;
     }
-    return raw.slice(0, 560) + "\\n...";
+    return raw.slice(0, 900) + "\\n...";
   }
 
   function summarizeIssues(issues) {
@@ -554,18 +554,56 @@ function renderCompilerDemoScript(baseUrl: string): string {
     summary.append(header);
 
     if (Array.isArray(payload.providers)) {
-      const grid = makeNode("div", "demo-provider-grid");
+      const tabs = makeNode("div", "demo-provider-tabs");
+      const inspector = makeNode("div", "demo-inspector");
+      let activeProviderIndex = 0;
+      let activeVariantIndex = 0;
 
-      for (const provider of payload.providers) {
-        const card = makeNode("article", "demo-provider-card");
-        const top = makeNode("div", "demo-provider-top");
-        const name = makeNode("div", "demo-provider-name", provider.provider);
+      function renderInspector() {
+        clearNode(tabs);
+        clearNode(inspector);
+
+        payload.providers.forEach((provider, index) => {
+          const button = makeNode(
+            "button",
+            index === activeProviderIndex ? "demo-tab is-active" : "demo-tab"
+          );
+          button.type = "button";
+          button.append(
+            makeNode("span", "demo-tab-title", provider.provider),
+            makeNode("span", "demo-tab-subtitle", "Score " + String(provider.score))
+          );
+          button.addEventListener("click", () => {
+            activeProviderIndex = index;
+            activeVariantIndex = 0;
+            renderInspector();
+          });
+          tabs.append(button);
+        });
+
+        const provider = payload.providers[activeProviderIndex];
+        if (!provider) {
+          return;
+        }
+
+        const top = makeNode("div", "demo-inspector-top");
+        const left = makeNode("div", "stack");
+        left.append(
+          makeNode("div", "demo-provider-heading", provider.provider),
+          makeNode(
+            "p",
+            "demo-provider-copy",
+            Array.isArray(provider.notes) && typeof provider.notes[0] === "string"
+              ? provider.notes[0]
+              : "Provider-ready fragment generated from the normalized schema."
+          )
+        );
         const state = makeNode(
           "div",
           provider.compatible ? "demo-provider-badge is-good" : "demo-provider-badge is-fix",
-          provider.compatible ? "Ready" : "Needs fixes"
+          provider.compatible ? "Ready to ship" : "Needs fixes"
         );
-        top.append(name, state);
+        top.append(left, state);
 
         const stats = makeNode("div", "demo-provider-stats");
         stats.append(
@@ -573,35 +611,64 @@ function renderCompilerDemoScript(baseUrl: string): string {
           makeNode(
             "span",
             "demo-provider-stat",
-            Array.isArray(provider.variants) ? String(provider.variants.length) + " variant" + (provider.variants.length === 1 ? "" : "s") : "0 variants"
+            Array.isArray(provider.variants)
+              ? String(provider.variants.length) + " compiled variant" + (provider.variants.length === 1 ? "" : "s")
+              : "0 compiled variants"
           ),
           makeNode("span", "demo-provider-stat", summarizeIssues(provider.issues))
         );
 
-        const note = makeNode(
-          "p",
-          "demo-provider-note",
-          Array.isArray(provider.notes) && typeof provider.notes[0] === "string"
-            ? provider.notes[0]
-            : "Provider-ready fragment generated from the normalized schema."
+        const body = makeNode("div", "demo-inspector-body");
+        const meta = makeNode("div", "demo-info-panel");
+        meta.append(
+          makeNode("div", "demo-provider-variant-label", "What changed"),
+          makeNode(
+            "p",
+            "demo-provider-copy",
+            Array.isArray(provider.notes) && provider.notes.length > 1 && typeof provider.notes[1] === "string"
+              ? provider.notes[1]
+              : "Schema Gateway emits a provider-specific request body from the normalized schema so you do not have to maintain per-runtime glue code."
+          )
         );
 
-        const variant = Array.isArray(provider.variants) ? provider.variants[0] : null;
+        const codeShell = makeNode("div", "demo-code-panel");
+        const variantTabs = makeNode("div", "demo-variant-tabs");
+        const variants = Array.isArray(provider.variants) ? provider.variants : [];
+        const safeVariantIndex =
+          activeVariantIndex < variants.length ? activeVariantIndex : 0;
+        activeVariantIndex = safeVariantIndex;
+        variants.forEach((variant, index) => {
+          const button = makeNode(
+            "button",
+            index === activeVariantIndex ? "demo-variant-tab is-active" : "demo-variant-tab",
+            variant.label
+          );
+          button.type = "button";
+          button.addEventListener("click", () => {
+            activeVariantIndex = index;
+            renderInspector();
+          });
+          variantTabs.append(button);
+        });
+
+        const activeVariant = variants[activeVariantIndex] ?? null;
         const variantLabel = makeNode(
           "div",
           "demo-provider-variant-label",
-          variant && typeof variant.label === "string" ? variant.label : "Compiled request body"
+          activeVariant ? activeVariant.key.replace(/_/g, " ") : "compiled request body"
         );
         const codeBlock = document.createElement("pre");
         const code = document.createElement("code");
-        code.textContent = variant ? stringifyPreview(variant.requestBody) : "{}";
+        code.textContent = activeVariant ? stringifyPreview(activeVariant.requestBody) : "{}";
         codeBlock.append(code);
+        codeShell.append(variantTabs, variantLabel, codeBlock);
 
-        card.append(top, stats, note, variantLabel, codeBlock);
-        grid.append(card);
+        body.append(meta, codeShell);
+        inspector.append(top, stats, body);
       }
 
-      summary.append(grid);
+      summary.append(tabs, inspector);
+      renderInspector();
     }
   }
 
@@ -711,23 +778,27 @@ function renderMarketingPage(context: {
     <meta name="twitter:description" content="${escapeHtml(context.description)}">
     ${jsonLdMarkup}
     <style>
+      @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap");
       :root {
         color-scheme: light;
-        --bg: #f4efe5;
-        --panel: #fffdf8;
-        --ink: #172126;
-        --muted: #54616b;
-        --accent: #0f766e;
+        --bg: #f2f0ea;
+        --panel: rgba(255, 255, 255, 0.7);
+        --panel-solid: #fbfaf7;
+        --ink: #101519;
+        --muted: #5a646d;
+        --accent: #16686a;
         --accent-ink: #f6fffd;
-        --border: #d8d2c7;
+        --border: rgba(16, 21, 25, 0.08);
+        --shadow: 0 24px 80px rgba(18, 24, 29, 0.08);
       }
       * { box-sizing: border-box; }
       body {
         margin: 0;
-        font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+        font-family: "Manrope", "Segoe UI", sans-serif;
         background:
-          radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 30%),
-          linear-gradient(180deg, #fbf7ef 0%, var(--bg) 100%);
+          radial-gradient(circle at top left, rgba(116, 188, 255, 0.14), transparent 24%),
+          radial-gradient(circle at top right, rgba(22, 104, 106, 0.12), transparent 28%),
+          linear-gradient(180deg, #faf8f4 0%, var(--bg) 100%);
         color: var(--ink);
       }
       a {
@@ -737,7 +808,7 @@ function renderMarketingPage(context: {
       .site-footer {
         max-width: 1120px;
         margin: 0 auto;
-        padding: 22px 20px;
+        padding: 24px 20px;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -753,7 +824,7 @@ function renderMarketingPage(context: {
       .brand {
         text-decoration: none;
         font-weight: 700;
-        letter-spacing: -0.03em;
+        letter-spacing: -0.04em;
       }
       .nav-links,
       .footer-links {
@@ -769,14 +840,14 @@ function renderMarketingPage(context: {
       main {
         max-width: 1120px;
         margin: 0 auto;
-        padding: 18px 20px 80px;
+        padding: 10px 20px 80px;
       }
       .panel {
-        background: var(--panel);
+        background: var(--panel-solid);
         border: 1px solid var(--border);
-        border-radius: 24px;
+        border-radius: 28px;
         padding: 28px;
-        box-shadow: 0 14px 50px rgba(23, 33, 38, 0.08);
+        box-shadow: var(--shadow);
       }
       .hero {
         display: grid;
@@ -816,20 +887,21 @@ function renderMarketingPage(context: {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        min-height: 48px;
-        border-radius: 999px;
-        padding: 0 18px;
+        min-height: 44px;
+        border-radius: 14px;
+        padding: 0 16px;
         text-decoration: none;
         font-weight: 600;
       }
       .primary {
         background: var(--accent);
         color: var(--accent-ink);
+        box-shadow: 0 14px 30px rgba(22, 104, 106, 0.18);
       }
       .secondary {
         border: 1px solid var(--border);
         color: var(--ink);
-        background: rgba(255, 255, 255, 0.85);
+        background: rgba(255, 255, 255, 0.9);
       }
       .ghost {
         border: 1px dashed var(--border);
@@ -843,7 +915,7 @@ function renderMarketingPage(context: {
       }
       .card {
         border: 1px solid var(--border);
-        border-radius: 18px;
+        border-radius: 20px;
         padding: 18px;
         background: rgba(255, 255, 255, 0.7);
       }
@@ -899,8 +971,7 @@ function renderMarketingPage(context: {
         padding: 16px;
         background: #132028;
         color: #f4efe5;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
+        white-space: pre;
       }
       code {
         font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
@@ -958,17 +1029,16 @@ function renderMarketingPage(context: {
       }
       .compiler-hero-shell {
         display: grid;
-        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
-        gap: 18px;
+        grid-template-columns: minmax(0, 1.02fr) minmax(320px, 0.98fr);
+        gap: 16px;
         overflow: hidden;
       }
       .compiler-hero-copy {
-        position: relative;
         gap: 20px;
-        padding: 32px;
+        padding: 34px;
         background:
-          radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 34%),
-          linear-gradient(150deg, #fffdf7 0%, #f6efe1 100%);
+          radial-gradient(circle at top left, rgba(116, 188, 255, 0.16), transparent 36%),
+          linear-gradient(150deg, #fffdf9 0%, #f4efe5 100%);
       }
       .compiler-kicker {
         letter-spacing: 0.08em;
@@ -1008,8 +1078,8 @@ function renderMarketingPage(context: {
         gap: 16px;
         padding: 24px;
         background:
-          radial-gradient(circle at top right, rgba(72, 196, 170, 0.18), transparent 30%),
-          linear-gradient(180deg, #142028 0%, #0f171d 100%);
+          radial-gradient(circle at top right, rgba(72, 196, 170, 0.12), transparent 30%),
+          linear-gradient(180deg, #11181d 0%, #10161a 100%);
         color: #ecf6f3;
         border: 1px solid rgba(255, 255, 255, 0.08);
       }
@@ -1043,7 +1113,7 @@ function renderMarketingPage(context: {
         border-radius: 20px;
         overflow: hidden;
         border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(0, 0, 0, 0.2);
+        background: rgba(255, 255, 255, 0.04);
       }
       .compiler-window-bar {
         display: flex;
@@ -1085,7 +1155,7 @@ function renderMarketingPage(context: {
         gap: 10px;
         padding: 18px;
         border-radius: 20px;
-        background: rgba(255, 255, 255, 0.68);
+        background: rgba(255, 255, 255, 0.76);
         border: 1px solid var(--border);
       }
       .compiler-benefit p {
@@ -1095,10 +1165,10 @@ function renderMarketingPage(context: {
       .compiler-lab {
         display: grid;
         gap: 22px;
-        padding: 30px;
+        padding: 28px;
         background:
-          radial-gradient(circle at top right, rgba(15, 118, 110, 0.1), transparent 28%),
-          linear-gradient(180deg, #fffdf7 0%, #f8f2e7 100%);
+          radial-gradient(circle at top right, rgba(116, 188, 255, 0.14), transparent 24%),
+          linear-gradient(180deg, #fffdfa 0%, #f7f1e7 100%);
       }
       .compiler-lab [data-variant="error"] {
         color: #9f2b1c;
@@ -1134,16 +1204,16 @@ function renderMarketingPage(context: {
       }
       .compiler-lab-grid {
         display: grid;
-        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+        grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
         gap: 18px;
       }
       .compiler-form-shell,
       .compiler-output-shell {
         display: grid;
         gap: 16px;
-        padding: 22px;
+        padding: 20px;
         border-radius: 24px;
-        background: rgba(255, 255, 255, 0.82);
+        background: rgba(255, 255, 255, 0.88);
         border: 1px solid var(--border);
       }
       .compiler-form-shell input,
@@ -1153,7 +1223,7 @@ function renderMarketingPage(context: {
         color: var(--ink);
       }
       .compiler-form-shell textarea {
-        min-height: 220px;
+        min-height: 280px;
       }
       .compiler-output-shell pre {
         min-height: 0;
@@ -1188,18 +1258,9 @@ function renderMarketingPage(context: {
         margin: 0;
         font-size: 1rem;
       }
-      .compiler-hero-shell .primary,
-      .compiler-hero-shell .secondary,
-      .compiler-lab .primary,
-      .compiler-lab .secondary,
-      .compiler-note-card .secondary {
-        min-height: 44px;
-        border-radius: 14px;
-        padding: 0 16px;
-      }
       .demo-summary {
         display: grid;
-        gap: 14px;
+        gap: 16px;
       }
       .demo-summary-head {
         display: flex;
@@ -1225,34 +1286,63 @@ function renderMarketingPage(context: {
         min-height: 34px;
         padding: 0 12px;
         border-radius: 999px;
-        background: rgba(15, 118, 110, 0.1);
-        border: 1px solid rgba(15, 118, 110, 0.16);
-        color: #0b5d57;
+        background: rgba(22, 104, 106, 0.08);
+        border: 1px solid rgba(22, 104, 106, 0.14);
+        color: #11595c;
         font-size: 0.88rem;
         font-weight: 600;
       }
-      .demo-provider-grid {
+      .demo-provider-tabs {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 14px;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 10px;
       }
-      .demo-provider-card {
+      .demo-tab {
         display: grid;
-        gap: 12px;
-        padding: 18px;
-        border-radius: 20px;
-        background: rgba(244, 239, 229, 0.62);
+        gap: 2px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.72);
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+        transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+      }
+      .demo-tab:hover {
+        transform: translateY(-1px);
+        border-color: rgba(22, 104, 106, 0.22);
+      }
+      .demo-tab.is-active {
+        background: linear-gradient(180deg, rgba(22, 104, 106, 0.12), rgba(255, 255, 255, 0.86));
+        border-color: rgba(22, 104, 106, 0.24);
+      }
+      .demo-tab-title {
+        font-size: 0.94rem;
+        font-weight: 700;
+        text-transform: capitalize;
+      }
+      .demo-tab-subtitle {
+        color: var(--muted);
+        font-size: 0.82rem;
+      }
+      .demo-inspector {
+        display: grid;
+        gap: 16px;
+        padding: 20px;
+        border-radius: 24px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(248, 243, 234, 0.92));
         border: 1px solid var(--border);
       }
-      .demo-provider-top {
+      .demo-inspector-top {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
-        align-items: center;
+        gap: 14px;
+        align-items: flex-start;
         flex-wrap: wrap;
       }
-      .demo-provider-name {
-        font-size: 1.05rem;
+      .demo-provider-heading {
+        font-size: 1.18rem;
         font-weight: 700;
         letter-spacing: -0.02em;
         text-transform: capitalize;
@@ -1290,10 +1380,11 @@ function renderMarketingPage(context: {
         font-size: 0.82rem;
         color: var(--muted);
       }
-      .demo-provider-note {
+      .demo-provider-copy {
         margin: 0;
         font-size: 0.98rem;
         line-height: 1.55;
+        color: var(--muted);
       }
       .demo-provider-variant-label {
         color: var(--muted);
@@ -1301,10 +1392,47 @@ function renderMarketingPage(context: {
         text-transform: uppercase;
         letter-spacing: 0.08em;
       }
-      .demo-provider-card pre {
+      .demo-inspector-body {
+        display: grid;
+        grid-template-columns: minmax(200px, 0.72fr) minmax(0, 1.28fr);
+        gap: 16px;
+      }
+      .demo-info-panel,
+      .demo-code-panel {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.66);
+        border: 1px solid rgba(16, 21, 25, 0.06);
+      }
+      .demo-variant-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .demo-variant-tab {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.8);
+        color: inherit;
+        cursor: pointer;
+        font: inherit;
+      }
+      .demo-variant-tab.is-active {
+        background: rgba(22, 104, 106, 0.1);
+        border-color: rgba(22, 104, 106, 0.22);
+        color: #11595c;
+      }
+      .demo-code-panel pre {
         border-radius: 16px;
         padding: 14px;
         font-size: 0.84rem;
+        max-height: 380px;
       }
       .demo-raw-shell {
         border-top: 1px solid var(--border);
@@ -1361,7 +1489,7 @@ function renderMarketingPage(context: {
         .compiler-note-grid {
           grid-template-columns: 1fr;
         }
-        .demo-provider-grid {
+        .demo-inspector-body {
           grid-template-columns: 1fr;
         }
         .compiler-chip-grid {
