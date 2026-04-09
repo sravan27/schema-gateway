@@ -458,19 +458,151 @@ function renderCompilerDemoScript(baseUrl: string): string {
   const schemaField = document.getElementById("demo-schema");
   const targetsField = document.getElementById("demo-targets");
   const status = document.getElementById("demo-status");
-  const output = document.getElementById("demo-output");
+  const summary = document.getElementById("demo-summary");
+  const rawOutput = document.getElementById("demo-raw-output");
   const useSampleButton = document.getElementById("demo-use-sample");
   const runButton = document.getElementById("demo-run");
   const endpoint = ${JSON.stringify(`${baseUrl}/v1/demo/compile`)};
   const sampleSchema = ${JSON.stringify(JSON.stringify(DEMO_SAMPLE_SCHEMA, null, 2))};
 
-  if (!(form instanceof HTMLFormElement) || !(schemaField instanceof HTMLTextAreaElement) || !(targetsField instanceof HTMLInputElement) || !(status instanceof HTMLElement) || !(output instanceof HTMLElement)) {
+  if (!(form instanceof HTMLFormElement) || !(schemaField instanceof HTMLTextAreaElement) || !(targetsField instanceof HTMLInputElement) || !(status instanceof HTMLElement) || !(summary instanceof HTMLElement) || !(rawOutput instanceof HTMLElement)) {
     return;
+  }
+
+  function clearNode(node) {
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  }
+
+  function makeNode(tagName, className, text) {
+    const node = document.createElement(tagName);
+    if (className) {
+      node.className = className;
+    }
+    if (typeof text === "string") {
+      node.textContent = text;
+    }
+    return node;
+  }
+
+  function stringifyPreview(value) {
+    const raw = JSON.stringify(value, null, 2);
+    if (raw.length <= 560) {
+      return raw;
+    }
+    return raw.slice(0, 560) + "\\n...";
+  }
+
+  function summarizeIssues(issues) {
+    if (!Array.isArray(issues) || issues.length === 0) {
+      return "No schema issues in this target.";
+    }
+
+    const counts = { error: 0, warning: 0, info: 0 };
+    for (const issue of issues) {
+      if (issue && typeof issue.severity === "string" && issue.severity in counts) {
+        counts[issue.severity] += 1;
+      }
+    }
+
+    return [
+      counts.error > 0 ? counts.error + " error" + (counts.error === 1 ? "" : "s") : null,
+      counts.warning > 0 ? counts.warning + " warning" + (counts.warning === 1 ? "" : "s") : null,
+      counts.info > 0 ? counts.info + " info note" + (counts.info === 1 ? "" : "s") : null
+    ].filter(Boolean).join(" • ");
   }
 
   function setStatus(message, variant) {
     status.textContent = message;
     status.dataset.variant = variant;
+  }
+
+  function renderError(message, rawValue) {
+    clearNode(summary);
+    const card = makeNode("div", "demo-empty-state");
+    card.append(makeNode("div", "demo-empty-kicker", "Demo request failed"));
+    card.append(makeNode("div", "demo-empty-title", message));
+    card.append(makeNode("p", "demo-empty-copy", "Fix the schema or targets, then run the demo again."));
+    summary.append(card);
+    rawOutput.textContent = typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue, null, 2);
+  }
+
+  function renderPayload(payload) {
+    clearNode(summary);
+    rawOutput.textContent = JSON.stringify(payload, null, 2);
+
+    const providerCount = Array.isArray(payload.providers) ? payload.providers.length : 0;
+    const compatibleCount = Array.isArray(payload.providers)
+      ? payload.providers.filter((provider) => provider.compatible).length
+      : 0;
+
+    const header = makeNode("div", "demo-summary-head");
+    const heading = makeNode("div", "stack");
+    heading.append(makeNode("div", "demo-summary-kicker", "Hosted compiler result"));
+    heading.append(
+      makeNode(
+        "div",
+        "demo-summary-title",
+        providerCount > 0
+          ? payload.name + " • " + compatibleCount + "/" + providerCount + " targets ready"
+          : payload.name
+      )
+    );
+    const badge = makeNode("div", "demo-badge", payload.demo ? "Free demo" : "Signed API");
+    header.append(heading, badge);
+    summary.append(header);
+
+    if (Array.isArray(payload.providers)) {
+      const grid = makeNode("div", "demo-provider-grid");
+
+      for (const provider of payload.providers) {
+        const card = makeNode("article", "demo-provider-card");
+        const top = makeNode("div", "demo-provider-top");
+        const name = makeNode("div", "demo-provider-name", provider.provider);
+        const state = makeNode(
+          "div",
+          provider.compatible ? "demo-provider-badge is-good" : "demo-provider-badge is-fix",
+          provider.compatible ? "Ready" : "Needs fixes"
+        );
+        top.append(name, state);
+
+        const stats = makeNode("div", "demo-provider-stats");
+        stats.append(
+          makeNode("span", "demo-provider-stat", "Score " + String(provider.score)),
+          makeNode(
+            "span",
+            "demo-provider-stat",
+            Array.isArray(provider.variants) ? String(provider.variants.length) + " variant" + (provider.variants.length === 1 ? "" : "s") : "0 variants"
+          ),
+          makeNode("span", "demo-provider-stat", summarizeIssues(provider.issues))
+        );
+
+        const note = makeNode(
+          "p",
+          "demo-provider-note",
+          Array.isArray(provider.notes) && typeof provider.notes[0] === "string"
+            ? provider.notes[0]
+            : "Provider-ready fragment generated from the normalized schema."
+        );
+
+        const variant = Array.isArray(provider.variants) ? provider.variants[0] : null;
+        const variantLabel = makeNode(
+          "div",
+          "demo-provider-variant-label",
+          variant && typeof variant.label === "string" ? variant.label : "Compiled request body"
+        );
+        const codeBlock = document.createElement("pre");
+        const code = document.createElement("code");
+        code.textContent = variant ? stringifyPreview(variant.requestBody) : "{}";
+        codeBlock.append(code);
+
+        card.append(top, stats, note, variantLabel, codeBlock);
+        grid.append(card);
+      }
+
+      summary.append(grid);
+    }
   }
 
   async function runDemo() {
@@ -480,7 +612,7 @@ function renderCompilerDemoScript(baseUrl: string): string {
       schema = JSON.parse(schemaField.value);
     } catch (error) {
       setStatus("Schema JSON is invalid. Fix the syntax and try again.", "error");
-      output.textContent = error instanceof Error ? error.message : String(error);
+      renderError("Schema JSON is invalid.", error instanceof Error ? error.message : String(error));
       return;
     }
 
@@ -491,7 +623,8 @@ function renderCompilerDemoScript(baseUrl: string): string {
 
     runButton?.setAttribute("disabled", "disabled");
     setStatus("Running the free hosted demo...", "loading");
-    output.textContent = "";
+    clearNode(summary);
+    rawOutput.textContent = "";
 
     try {
       const response = await fetch(endpoint, {
@@ -508,7 +641,7 @@ function renderCompilerDemoScript(baseUrl: string): string {
 
       if (!response.ok) {
         setStatus(payload.error ?? "The demo request failed.", "error");
-        output.textContent = JSON.stringify(payload, null, 2);
+        renderError(payload.error ?? "The demo request failed.", payload);
         return;
       }
 
@@ -521,10 +654,10 @@ function renderCompilerDemoScript(baseUrl: string): string {
           : "Demo ran. This schema still needs provider fixes before it is portable.",
         "success"
       );
-      output.textContent = JSON.stringify(payload, null, 2);
+      renderPayload(payload);
     } catch (error) {
       setStatus("Network error while calling the demo endpoint.", "error");
-      output.textContent = error instanceof Error ? error.message : String(error);
+      renderError("Network error while calling the demo endpoint.", error instanceof Error ? error.message : String(error));
     } finally {
       runButton?.removeAttribute("disabled");
     }
@@ -832,7 +965,7 @@ function renderMarketingPage(context: {
       .compiler-hero-copy {
         position: relative;
         gap: 20px;
-        padding: 36px;
+        padding: 32px;
         background:
           radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 34%),
           linear-gradient(150deg, #fffdf7 0%, #f6efe1 100%);
@@ -873,7 +1006,7 @@ function renderMarketingPage(context: {
       .compiler-preview {
         display: grid;
         gap: 16px;
-        padding: 28px;
+        padding: 24px;
         background:
           radial-gradient(circle at top right, rgba(72, 196, 170, 0.18), transparent 30%),
           linear-gradient(180deg, #142028 0%, #0f171d 100%);
@@ -964,26 +1097,17 @@ function renderMarketingPage(context: {
         gap: 22px;
         padding: 30px;
         background:
-          radial-gradient(circle at top right, rgba(72, 196, 170, 0.14), transparent 28%),
-          linear-gradient(145deg, #102029 0%, #13232d 55%, #162f31 100%);
-        color: #eef7f4;
-        border-color: rgba(255, 255, 255, 0.06);
-      }
-      .compiler-lab h2,
-      .compiler-lab p,
-      .compiler-lab .field-label,
-      .compiler-lab .meta,
-      .compiler-lab .eyebrow {
-        color: inherit;
+          radial-gradient(circle at top right, rgba(15, 118, 110, 0.1), transparent 28%),
+          linear-gradient(180deg, #fffdf7 0%, #f8f2e7 100%);
       }
       .compiler-lab [data-variant="error"] {
-        color: #ffb5a6;
+        color: #9f2b1c;
       }
       .compiler-lab [data-variant="success"] {
-        color: #99f4d2;
+        color: #0b5d57;
       }
       .compiler-lab [data-variant="loading"] {
-        color: #ffe29a;
+        color: #7c5f1b;
       }
       .compiler-lab-head {
         display: flex;
@@ -1003,10 +1127,10 @@ function renderMarketingPage(context: {
         min-height: 38px;
         padding: 0 14px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(15, 118, 110, 0.08);
+        border: 1px solid rgba(15, 118, 110, 0.14);
         font-size: 0.9rem;
-        color: rgba(238, 247, 244, 0.86);
+        color: #0b5d57;
       }
       .compiler-lab-grid {
         display: grid;
@@ -1019,23 +1143,22 @@ function renderMarketingPage(context: {
         gap: 16px;
         padding: 22px;
         border-radius: 24px;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        backdrop-filter: blur(10px);
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid var(--border);
       }
       .compiler-form-shell input,
       .compiler-form-shell textarea {
-        border-color: rgba(255, 255, 255, 0.12);
-        background: rgba(10, 19, 25, 0.42);
-        color: #f3faf8;
+        border-color: var(--border);
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--ink);
       }
       .compiler-form-shell textarea {
-        min-height: 360px;
+        min-height: 220px;
       }
       .compiler-output-shell pre {
-        min-height: 440px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(7, 12, 15, 0.48);
+        min-height: 0;
+        border: 1px solid rgba(15, 118, 110, 0.08);
+        background: #132028;
       }
       .compiler-output-header {
         display: flex;
@@ -1045,7 +1168,7 @@ function renderMarketingPage(context: {
         flex-wrap: wrap;
       }
       .compiler-output-caption {
-        color: rgba(238, 247, 244, 0.76);
+        color: var(--muted);
         font-size: 0.95rem;
       }
       .compiler-note-grid {
@@ -1065,6 +1188,160 @@ function renderMarketingPage(context: {
         margin: 0;
         font-size: 1rem;
       }
+      .compiler-hero-shell .primary,
+      .compiler-hero-shell .secondary,
+      .compiler-lab .primary,
+      .compiler-lab .secondary,
+      .compiler-note-card .secondary {
+        min-height: 44px;
+        border-radius: 14px;
+        padding: 0 16px;
+      }
+      .demo-summary {
+        display: grid;
+        gap: 14px;
+      }
+      .demo-summary-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .demo-summary-kicker {
+        color: var(--muted);
+        font-size: 0.86rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .demo-summary-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .demo-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 34px;
+        padding: 0 12px;
+        border-radius: 999px;
+        background: rgba(15, 118, 110, 0.1);
+        border: 1px solid rgba(15, 118, 110, 0.16);
+        color: #0b5d57;
+        font-size: 0.88rem;
+        font-weight: 600;
+      }
+      .demo-provider-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .demo-provider-card {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(244, 239, 229, 0.62);
+        border: 1px solid var(--border);
+      }
+      .demo-provider-top {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .demo-provider-name {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        text-transform: capitalize;
+      }
+      .demo-provider-badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 10px;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+      .demo-provider-badge.is-good {
+        background: rgba(15, 118, 110, 0.1);
+        color: #0b5d57;
+      }
+      .demo-provider-badge.is-fix {
+        background: rgba(159, 43, 28, 0.1);
+        color: #9f2b1c;
+      }
+      .demo-provider-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .demo-provider-stat {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 0 9px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid rgba(15, 118, 110, 0.08);
+        font-size: 0.82rem;
+        color: var(--muted);
+      }
+      .demo-provider-note {
+        margin: 0;
+        font-size: 0.98rem;
+        line-height: 1.55;
+      }
+      .demo-provider-variant-label {
+        color: var(--muted);
+        font-size: 0.84rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .demo-provider-card pre {
+        border-radius: 16px;
+        padding: 14px;
+        font-size: 0.84rem;
+      }
+      .demo-raw-shell {
+        border-top: 1px solid var(--border);
+        padding-top: 14px;
+      }
+      .demo-raw-shell summary {
+        cursor: pointer;
+        color: var(--muted);
+        font-size: 0.92rem;
+        font-weight: 600;
+      }
+      .demo-raw-shell pre {
+        margin-top: 12px;
+      }
+      .demo-empty-state {
+        display: grid;
+        gap: 10px;
+        padding: 20px;
+        border-radius: 20px;
+        background: rgba(159, 43, 28, 0.06);
+        border: 1px solid rgba(159, 43, 28, 0.12);
+      }
+      .demo-empty-kicker {
+        color: #9f2b1c;
+        font-size: 0.84rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+      }
+      .demo-empty-title {
+        font-size: 1.04rem;
+        font-weight: 700;
+      }
+      .demo-empty-copy {
+        margin: 0;
+        font-size: 0.96rem;
+        color: var(--muted);
+      }
       [data-variant="error"] {
         color: #9f2b1c;
       }
@@ -1082,6 +1359,9 @@ function renderMarketingPage(context: {
         .compiler-lab-grid,
         .compiler-benefits,
         .compiler-note-grid {
+          grid-template-columns: 1fr;
+        }
+        .demo-provider-grid {
           grid-template-columns: 1fr;
         }
         .compiler-chip-grid {
@@ -1356,24 +1636,24 @@ function renderCompilerPage(baseUrl: string): string {
     body: `<section class="panel compiler-hero-shell">
         <article class="compiler-hero-copy stack">
           <div class="eyebrow compiler-kicker">Schema compiler</div>
-          <h1>Turn one schema into provider-ready request payloads.</h1>
+          <h1>One schema. Four runtimes. Zero hand-mapping.</h1>
           <p class="compiler-lede">
-            Stop hand-translating JSON Schema into four incompatible request shapes. Schema Gateway
-            compiles one source schema into vendor-ready fragments for OpenAI, Gemini, Anthropic,
-            and Ollama, then gives you a shared API when local scripts stop being enough.
+            Schema Gateway compiles a single JSON Schema into ready-to-paste request payloads for
+            OpenAI, Gemini, Anthropic, and Ollama. Use it locally for free, then move to the shared
+            signed API when CI or multiple engineers need the same compiler surface.
           </p>
           <div class="compiler-stat-row">
             <div class="compiler-stat">
               <strong>4 providers</strong>
-              <span>compiled from one schema definition</span>
+              <span>from one source schema</span>
             </div>
             <div class="compiler-stat">
-              <strong>1 live demo</strong>
-              <span>hosted proof before anyone pays</span>
+              <strong>Live demo</strong>
+              <span>hosted proof before checkout</span>
             </div>
             <div class="compiler-stat">
               <strong>Signed output</strong>
-              <span>for teams that need shared enforcement</span>
+              <span>when the shared API matters</span>
             </div>
           </div>
           ${renderCodeBlock(PUBLIC_COMPILE_SNIPPET)}
@@ -1387,7 +1667,7 @@ function renderCompilerPage(baseUrl: string): string {
           </div>
         </article>
         <aside class="compiler-preview">
-          <div class="eyebrow">What comes out</div>
+          <div class="eyebrow">Compiled preview</div>
           <div class="compiler-chip-grid">
             <div class="compiler-chip">
               <strong>OpenAI</strong>
@@ -1399,7 +1679,7 @@ function renderCompilerPage(baseUrl: string): string {
             </div>
             <div class="compiler-chip">
               <strong>Anthropic</strong>
-              <span>Native <code>tools</code> definitions instead of compatibility guesses</span>
+              <span>Native <code>tools</code> definitions, not compatibility guesswork</span>
             </div>
             <div class="compiler-chip">
               <strong>Ollama</strong>
@@ -1416,34 +1696,34 @@ function renderCompilerPage(baseUrl: string): string {
             ${renderCodeBlock(previewSnippet)}
           </div>
           <p class="meta">
-            Need a shared hosted compiler for CI or multiple teams? The paid API returns the same
-            compiled bundle with a signature and stable base URL.
+            Need a shared compiler for CI or multiple teams? The paid API returns the same compiled
+            bundle with a signature and stable base URL.
           </p>
         </aside>
       </section>
       <section class="compiler-benefits">
         <article class="compiler-benefit">
-          <div class="eyebrow">No hand-mapping</div>
-          <p>Write one schema once, then ship provider-ready request bodies without per-vendor glue code.</p>
+          <div class="eyebrow">Less glue code</div>
+          <p>Write one schema once, then emit provider-ready request bodies instead of maintaining per-vendor wrappers.</p>
         </article>
         <article class="compiler-benefit">
           <div class="eyebrow">Earlier failure</div>
-          <p>Catch portability drift in a compiler step before it turns into mysterious runtime errors.</p>
+          <p>Catch portability drift in a compiler step before it turns into vague runtime failures.</p>
         </article>
         <article class="compiler-benefit">
           <div class="eyebrow">Free first</div>
-          <p>Use the live demo or local CLI for evaluation, then buy the shared API only when the team needs it.</p>
+          <p>Use the live demo or local CLI for evaluation, then buy the shared API only when the team actually needs it.</p>
         </article>
       </section>
       <section class="panel compiler-lab section" id="demo">
         <div class="compiler-lab-head">
           <div class="stack">
             <div class="eyebrow compiler-kicker">Interactive playground</div>
-            <h2>Run the hosted compiler before you pay.</h2>
+            <h2>Try the hosted compiler before you pay.</h2>
             <p>
-              This public demo is intentionally constrained, but it is real: compile only, small
-              schemas, no API key, signed response. It exists so the product proves itself before a
-              buyer ever touches checkout.
+              This public demo is intentionally limited, but it is real: compile only, small
+              schemas, no API key, signed response. The goal is simple: the product should prove
+              itself before anyone touches checkout.
             </p>
           </div>
           <div class="compiler-limit-row">
@@ -1473,13 +1753,16 @@ function renderCompilerPage(baseUrl: string): string {
               <div class="stack">
                 <div class="eyebrow compiler-kicker">Live output</div>
                 <div class="compiler-output-caption">
-                  The sample run loads automatically so the page shows value immediately instead of
-                  sitting empty.
+                  The sample run loads automatically so the page feels alive instead of empty.
                 </div>
               </div>
               <p class="meta" data-variant="loading" id="demo-status">Loading a sample compile run...</p>
             </div>
-            <pre><code id="demo-output"></code></pre>
+            <div class="demo-summary" id="demo-summary"></div>
+            <details class="demo-raw-shell">
+              <summary>Show raw demo bundle</summary>
+              <pre><code id="demo-raw-output"></code></pre>
+            </details>
             <div class="compiler-output-caption">
               Paid access unlocks the signed shared endpoints for <code>/v1/compile</code>,
               <code>/v1/lint</code>, and <code>/v1/normalize</code>.
@@ -1490,7 +1773,7 @@ function renderCompilerPage(baseUrl: string): string {
       <section class="compiler-note-grid section">
         <article class="compiler-note-card">
           <div class="eyebrow">Local path</div>
-          <p>Install from GitHub and run the compiler in your own workflow with no registry friction.</p>
+          <p>Install from GitHub and run the compiler locally with no registry friction.</p>
           ${renderCodeBlock(PUBLIC_INSTALL_COMMAND)}
         </article>
         <article class="compiler-note-card">

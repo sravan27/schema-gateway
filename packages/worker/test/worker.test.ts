@@ -195,8 +195,8 @@ describe("worker", () => {
     const compilerResponse = await app.request("http://example.test/compiler", {}, env);
     expect(compilerResponse.status).toBe(200);
     const compilerHtml = await compilerResponse.text();
-    expect(compilerHtml).toContain("Turn one schema into provider-ready request payloads");
-    expect(compilerHtml).toContain("schema-gateway compile");
+    expect(compilerHtml).toContain("One schema. Four runtimes. Zero hand-mapping.");
+    expect(compilerHtml).toContain("Show raw demo bundle");
     expect(compilerHtml).toContain("Run free demo");
     expect(compilerHtml).toContain("/v1/demo/compile");
 
