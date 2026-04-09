@@ -1588,6 +1588,247 @@ function renderMarketingPage(context: {
         font-size: 0.96rem;
         color: var(--muted);
       }
+      .spotlight {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+        gap: 16px;
+        overflow: hidden;
+      }
+      .spotlight-copy {
+        display: grid;
+        gap: 18px;
+        padding: 34px;
+        background:
+          radial-gradient(circle at top left, rgba(116, 188, 255, 0.16), transparent 34%),
+          linear-gradient(150deg, #fffdf9 0%, #f4efe5 100%);
+      }
+      .spotlight-lede {
+        max-width: 38rem;
+        font-size: 1.12rem;
+      }
+      .spotlight-panel {
+        display: grid;
+        gap: 16px;
+        padding: 24px;
+        background:
+          radial-gradient(circle at top right, rgba(72, 196, 170, 0.12), transparent 30%),
+          linear-gradient(180deg, #11181d 0%, #10161a 100%);
+        color: #ecf6f3;
+      }
+      .spotlight-panel .eyebrow,
+      .spotlight-panel .meta {
+        color: rgba(236, 246, 243, 0.72);
+      }
+      .spotlight-steps {
+        display: grid;
+        gap: 10px;
+      }
+      .spotlight-step {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 12px;
+        align-items: start;
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .spotlight-step-index {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 999px;
+        background: rgba(22, 104, 106, 0.28);
+        color: #ecf6f3;
+        font-size: 0.84rem;
+        font-weight: 700;
+      }
+      .spotlight-step strong {
+        display: block;
+        margin-bottom: 4px;
+        font-size: 0.95rem;
+      }
+      .spotlight-step span {
+        color: rgba(236, 246, 243, 0.72);
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+      .spotlight-window {
+        display: grid;
+        gap: 0;
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+      }
+      .spotlight-window pre {
+        border-radius: 0;
+        background: transparent;
+      }
+      .compact-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .compact-card {
+        display: grid;
+        gap: 10px;
+        padding: 18px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+      .compact-card p {
+        margin: 0;
+        font-size: 0.98rem;
+      }
+      .split-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+        gap: 16px;
+      }
+      .glass-panel {
+        display: grid;
+        gap: 16px;
+        padding: 24px;
+        border-radius: 26px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+      .glass-panel.dark {
+        background:
+          radial-gradient(circle at top right, rgba(72, 196, 170, 0.12), transparent 28%),
+          linear-gradient(180deg, #12191d 0%, #172026 100%);
+        color: #eef4f2;
+      }
+      .glass-panel.dark .eyebrow,
+      .glass-panel.dark .meta,
+      .glass-panel.dark p {
+        color: rgba(238, 244, 242, 0.78);
+      }
+      .flow-list {
+        display: grid;
+        gap: 12px;
+      }
+      .flow-item {
+        display: grid;
+        gap: 8px;
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--border);
+      }
+      .flow-item strong {
+        font-size: 1rem;
+      }
+      .flow-item p {
+        margin: 0;
+        font-size: 0.96rem;
+        color: var(--muted);
+      }
+      .provider-pill-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .provider-pill {
+        display: grid;
+        gap: 4px;
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.74);
+        border: 1px solid var(--border);
+      }
+      .provider-pill strong {
+        font-size: 0.95rem;
+      }
+      .provider-pill span {
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+      .cta-band {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 16px;
+        align-items: center;
+        padding: 24px 28px;
+        border-radius: 26px;
+        background:
+          radial-gradient(circle at top left, rgba(116, 188, 255, 0.14), transparent 30%),
+          linear-gradient(180deg, #fffdfa 0%, #f4efe5 100%);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+      .cta-band p {
+        margin: 0;
+      }
+      .pricing-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.92fr);
+        gap: 16px;
+      }
+      .pricing-hero {
+        display: grid;
+        gap: 18px;
+        padding: 32px;
+      }
+      .pricing-price {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        font-weight: 800;
+        letter-spacing: -0.04em;
+      }
+      .pricing-price strong {
+        font-size: clamp(2.6rem, 7vw, 4rem);
+      }
+      .pricing-price span {
+        color: var(--muted);
+        font-size: 1rem;
+        font-weight: 600;
+      }
+      .pricing-box {
+        display: grid;
+        gap: 14px;
+        padding: 22px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.76);
+        border: 1px solid var(--border);
+      }
+      .pricing-checks {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding-left: 18px;
+      }
+      .pricing-compare {
+        display: grid;
+        gap: 12px;
+      }
+      .pricing-row {
+        display: grid;
+        grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1fr) minmax(0, 1fr);
+        gap: 12px;
+        align-items: start;
+        padding: 14px 0;
+        border-top: 1px solid var(--border);
+      }
+      .pricing-row:first-child {
+        border-top: 0;
+        padding-top: 0;
+      }
+      .pricing-row strong {
+        font-size: 0.95rem;
+      }
+      .pricing-row span {
+        color: var(--muted);
+        font-size: 0.94rem;
+        line-height: 1.5;
+      }
       [data-variant="error"] {
         color: #9f2b1c;
       }
@@ -1601,9 +1842,20 @@ function renderMarketingPage(context: {
         .hero {
           grid-template-columns: 1fr;
         }
+        .spotlight,
         .compiler-hero-shell,
         .compiler-lab-grid,
+        .split-panel,
+        .compact-grid,
+        .pricing-shell,
+        .pricing-row,
         .compiler-note-grid {
+          grid-template-columns: 1fr;
+        }
+        .provider-pill-grid {
+          grid-template-columns: 1fr;
+        }
+        .cta-band {
           grid-template-columns: 1fr;
         }
         .demo-inspector-body {
@@ -1664,6 +1916,12 @@ function renderLandingPage(context: {
       url: context.checkoutUrl ?? `${context.baseUrl}/pricing`
     }
   };
+  const claimSnippet = `curl -X POST ${context.baseUrl}/v1/access/polar/claim \\
+  -H 'content-type: application/json' \\
+  -d '{"orderId":"polar_order_id","email":"you@example.com"}'`;
+  const liveDemoSnippet = `curl -X POST ${context.baseUrl}/v1/demo/compile \\
+  -H 'content-type: application/json' \\
+  -d '{"schema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["city","temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'`;
 
   return renderMarketingPage({
     baseUrl: context.baseUrl,
@@ -1672,23 +1930,33 @@ function renderLandingPage(context: {
     description:
       "Stop rewriting JSON Schema for every model vendor. Schema Gateway lints, normalizes, and signs structured outputs across OpenAI, Gemini, Anthropic, Ollama, and LangChain-style wrappers.",
     jsonLd: [softwareJsonLd, faqJsonLd],
-    body: `<section class="panel hero">
-        <article class="stack">
-          <div class="eyebrow">Structured output portability for AI teams</div>
+    body: `<section class="panel spotlight">
+        <article class="spotlight-copy">
+          <div class="eyebrow compiler-kicker">Structured output portability for AI teams</div>
           <h1>Stop rewriting one schema for every model vendor.</h1>
-          <p>
-            Schema Gateway exists for the moment when your JSON Schema passes local validation but
-            breaks under OpenAI strict mode, Gemini subset handling, Anthropic compatibility mode,
-            or local-model wrappers. We lint the schema, rewrite safe provider variants, normalize
-            malformed payloads, and return signed results for production pipelines.
+          <p class="spotlight-lede">
+            Schema Gateway is the reliability layer between your JSON Schema and the model APIs that
+            keep interpreting it differently. Lint locally for free, compile provider-ready request
+            payloads, and move to the signed shared API when production workflows need one stable surface.
           </p>
+          <div class="compiler-stat-row">
+            <div class="compiler-stat">
+              <strong>Free first</strong>
+              <span>local CLI, SDK, and live demo</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>Rs 499 once</strong>
+              <span>starter access to the shared API</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>Claimable key</strong>
+              <span>buy once, then self-serve your access</span>
+            </div>
+          </div>
           <div class="actions">
             <a class="primary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Run free live demo</a>
             ${checkoutMarkup}
-            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compare">See provider comparisons</a>
-            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler">Compile provider payloads</a>
-            <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install from GitHub</a>
-            <a class="secondary" href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/pricing">See pricing</a>
           </div>
           <div class="pill-row">
             <span class="pill">OpenAI strict schema fixes</span>
@@ -1696,103 +1964,106 @@ function renderLandingPage(context: {
             <span class="pill">Anthropic compatibility warnings</span>
             <span class="pill">Ollama validation guardrails</span>
           </div>
+          ${contactMarkup}
         </article>
-        <aside class="card stack">
-          <div class="eyebrow">Free first, paid when shared enforcement matters</div>
-          <h3>What you can use today</h3>
-          <ul class="list">
-            <li>Free local CLI and SDK for schema validation and JSON repair</li>
-            <li>Portable schema linting across OpenAI, Gemini, Anthropic, and Ollama</li>
-            <li>Schema compiler that generates provider-ready request fragments</li>
-            <li>Reusable GitHub Action for CI summaries on every pull request</li>
-            <li>Paid stateless access claims via Polar when you need a shared API</li>
-          </ul>
-          <div class="section">
-            ${renderCodeBlock(`schema-gateway lint --schema ./schema.json --target openai,gemini`)}
+        <aside class="spotlight-panel">
+          <div class="eyebrow">Why teams buy it</div>
+          <div class="spotlight-steps">
+            <div class="spotlight-step">
+              <span class="spotlight-step-index">1</span>
+              <div>
+                <strong>Compile one schema into four request shapes</strong>
+                <span>OpenAI, Gemini, Anthropic, and Ollama all get provider-ready fragments from one source schema.</span>
+              </div>
+            </div>
+            <div class="spotlight-step">
+              <span class="spotlight-step-index">2</span>
+              <div>
+                <strong>Use the live demo before buying</strong>
+                <span>The public compiler demo proves the hosted path without asking for signup, tokens, or registry setup.</span>
+              </div>
+            </div>
+            <div class="spotlight-step">
+              <span class="spotlight-step-index">3</span>
+              <div>
+                <strong>Buy once and claim an API key</strong>
+                <span>Checkout is a one-time starter pack. Claim a signed access key from the paid order when the team is ready.</span>
+              </div>
+            </div>
+          </div>
+          <div class="spotlight-window">
+            ${renderCodeBlock(liveDemoSnippet)}
           </div>
           <p class="meta">Base URL: <code>${escapeHtml(context.baseUrl)}</code></p>
-          ${contactMarkup}
         </aside>
       </section>
-      <section class="panel section">
-        <h2>Why teams search for this</h2>
-        <table class="matrix">
-          <thead>
-            <tr>
-              <th>Provider</th>
-              <th>What breaks</th>
-              <th>What Schema Gateway does</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>OpenAI</td>
-              <td>Strict structured outputs reject schemas that look valid but keep optional fields or permissive objects.</td>
-              <td>Rewrites required and nullable fields, closes object shapes, and scores strict compatibility.</td>
-            </tr>
-            <tr>
-              <td>Gemini</td>
-              <td>Structured output supports a subset of JSON Schema and Gemini 2.0 needs explicit <code>propertyOrdering</code>.</td>
-              <td>Adds provider-specific ordering and flags subset-only schema drift.</td>
-            </tr>
-            <tr>
-              <td>Anthropic compatibility</td>
-              <td>The OpenAI compatibility layer is convenient, but strict guarantees do not map cleanly.</td>
-              <td>Flags compatibility-mode risks before teams assume schema conformance.</td>
-            </tr>
-            <tr>
-              <td>Ollama</td>
-              <td>Local structured output is useful, but local and hosted providers still diverge.</td>
-              <td>Keeps one portability report and validation layer across local and hosted runtimes.</td>
-            </tr>
-          </tbody>
-        </table>
-      </section>
-      <section class="grid section">
-        ${COMPARE_PAGES.map(
-          (page) => `<article class="card">
-              <div class="eyebrow">${escapeHtml(page.shortTitle)} compatibility</div>
-              <h3>${escapeHtml(page.title)}</h3>
-              <p class="meta">${escapeHtml(page.description)}</p>
-              <div class="actions">
-                <a class="secondary" href="${escapeHtml(context.baseUrl)}/compare/${escapeHtml(page.slug)}">Open page</a>
-              </div>
-            </article>`
-        ).join("")}
-      </section>
-      <section class="grid section">
-        <article class="panel">
-          <h2>Free local workflow</h2>
-          <p>Developers can lint and validate locally before buying anything, even before npm auth exists.</p>
-          ${renderCodeBlock(`${PUBLIC_INSTALL_COMMAND}
-schema-gateway validate --schema ./schema.json --payload ./payload.json
-schema-gateway lint --schema ./schema.json --target openai,gemini,anthropic,ollama`)}
+      <section class="compact-grid section">
+        <article class="compact-card">
+          <div class="eyebrow">Provider drift</div>
+          <p>One schema that passes local validation can still fail under OpenAI strict mode, Gemini subsets, or compatibility layers.</p>
         </article>
-        <article class="panel">
-          <h2>Paid claim flow</h2>
-          <p>Buy access once, then claim a signed access key from the paid Polar order.</p>
-          ${renderCodeBlock(`curl -X POST ${context.baseUrl}/v1/access/polar/claim \\
-  -H 'content-type: application/json' \\
-  -d '{"orderId":"polar_order_id","email":"you@example.com"}'`)}
+        <article class="compact-card">
+          <div class="eyebrow">Free evaluation</div>
+          <p>Try the live compiler demo or install from GitHub before you buy anything.</p>
+        </article>
+        <article class="compact-card">
+          <div class="eyebrow">Paid when shared API matters</div>
+          <p>Move to the hosted signed endpoints only when multiple engineers or CI jobs need the same stable origin.</p>
         </article>
       </section>
-      <section class="grid section">
-        <article class="panel">
-          <h2>Schema compiler</h2>
-          <p>Generate provider-ready request fragments instead of manually translating JSON Schema into four different SDK shapes.</p>
-          ${renderCodeBlock(PUBLIC_COMPILE_SNIPPET)}
-          <div class="actions">
-            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler">Open compiler guide</a>
+      <section class="split-panel section">
+        <article class="glass-panel">
+          <div class="eyebrow compiler-kicker">How it works</div>
+          <h2>Evaluate locally. Upgrade when the team needs a shared runtime.</h2>
+          <div class="flow-list">
+            <div class="flow-item">
+              <strong>Lint and compile for free</strong>
+              <p>Run the CLI locally or use the live demo to inspect portability issues and generated request bodies.</p>
+            </div>
+            <div class="flow-item">
+              <strong>Buy starter access</strong>
+              <p>The paid tier is a one-time starter purchase for signed compiler, lint, and normalize endpoints.</p>
+            </div>
+            <div class="flow-item">
+              <strong>Claim your key from the paid order</strong>
+              <p>After checkout, claim a signed access key from the Polar order and point CI or shared workflows at the API.</p>
+            </div>
           </div>
         </article>
-        <article class="panel">
-          <h2>GitHub CI check</h2>
-          <p>Drop Schema Gateway into CI and get a job summary with compatibility scores, top issues, and a generated request snippet.</p>
-          ${renderCodeBlock(PUBLIC_CI_SNIPPET)}
-          <div class="actions">
-            <a class="secondary" href="${escapeHtml(context.baseUrl)}/ci">Open CI guide</a>
+        <article class="glass-panel dark">
+          <div class="eyebrow compiler-kicker">Where value shows up</div>
+          <div class="provider-pill-grid">
+            <div class="provider-pill">
+              <strong>OpenAI</strong>
+              <span>strict schema normalization and required-field fixes</span>
+            </div>
+            <div class="provider-pill">
+              <strong>Gemini</strong>
+              <span>subset-safe schema generation with property ordering</span>
+            </div>
+            <div class="provider-pill">
+              <strong>Anthropic</strong>
+              <span>compatibility warnings before teams trust the wrong guarantee</span>
+            </div>
+            <div class="provider-pill">
+              <strong>Ollama</strong>
+              <span>the same portability layer across local and hosted inference</span>
+            </div>
           </div>
+          ${renderCodeBlock(claimSnippet)}
         </article>
+      </section>
+      <section class="cta-band section">
+        <div class="stack">
+          <div class="eyebrow compiler-kicker">Start here</div>
+          <h2>See the compiler work before you buy. Then claim a key when it saves real time.</h2>
+          <p>That is the whole funnel: prove value fast, keep the free path open, and only ask for money when the shared API is clearly useful.</p>
+        </div>
+        <div class="actions">
+          <a class="primary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Open live demo</a>
+          <a class="secondary" href="${escapeHtml(context.baseUrl)}/pricing">Open pricing</a>
+          <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install from GitHub</a>
+        </div>
       </section>
       <section class="panel section" id="faq">
         <h2>FAQ</h2>
@@ -2178,6 +2449,9 @@ function renderPricingPage(context: {
   const checkoutMarkup = context.checkoutUrl
     ? `<a class="primary" href="${escapeHtml(context.checkoutUrl)}">Buy starter access for Rs 499</a>`
     : `<span class="ghost">Checkout not configured</span>`;
+  const claimSnippet = `curl -X POST ${context.baseUrl}/v1/access/polar/claim \\
+  -H 'content-type: application/json' \\
+  -d '{"orderId":"polar_order_id","email":"you@example.com"}'`;
 
   return renderMarketingPage({
     baseUrl: context.baseUrl,
@@ -2185,40 +2459,64 @@ function renderPricingPage(context: {
     title: "Schema Gateway Pricing | Free local SDK, Rs 499 starter access",
     description:
       "Free local SDK and CLI for schema validation, with a paid Rs 499 starter pack for shared API access and signed portability reports.",
-    body: `<section class="grid">
-        <article class="panel">
-          <div class="eyebrow">Free tier</div>
-          <h1>Use the SDK locally for free.</h1>
-          <ul class="list">
-            <li>Local schema validation and JSON repair</li>
-            <li>Provider-portability linting in the CLI and SDK</li>
-            <li>Installable from a public GitHub release with no npm auth</li>
-          </ul>
-          <div class="section">
-            ${renderCodeBlock(`${PUBLIC_INSTALL_COMMAND}
-schema-gateway lint --schema ./schema.json --target openai,gemini`)}
+    body: `<section class="panel pricing-shell">
+        <article class="pricing-hero">
+          <div class="eyebrow compiler-kicker">Pricing</div>
+          <h1>Start free. Buy once when the shared API saves real engineering time.</h1>
+          <p class="spotlight-lede">
+            Schema Gateway keeps the evaluation path open: install locally, run the live compiler
+            demo, and only buy when your team wants one stable signed API surface for compiler,
+            lint, and normalize operations.
+          </p>
+          <div class="pricing-compare">
+            <div class="pricing-row">
+              <strong>Local SDK</strong>
+              <span>Free validation, repair, linting, and compilation in your own workflow.</span>
+              <span>Install from a public GitHub release with no npm auth requirement.</span>
+            </div>
+            <div class="pricing-row">
+              <strong>Shared API</strong>
+              <span>Signed hosted responses for <code>/v1/compile</code>, <code>/v1/lint</code>, and <code>/v1/normalize</code>.</span>
+              <span>Best when CI or multiple engineers need the same stable runtime and claimable key flow.</span>
+            </div>
           </div>
           <div class="actions">
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Run free demo</a>
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install guide</a>
           </div>
         </article>
-        <article class="panel">
-          <div class="eyebrow">Paid starter</div>
-          <h2>Rs 499 one-time starter access</h2>
-          <p>
-            Best for teams that need a shared API endpoint, signed lint reports, and remote
-            normalization behind a stable base URL.
-          </p>
-          <ul class="list">
+        <aside class="glass-panel">
+          <div class="eyebrow">Starter pack</div>
+          <div class="pricing-price">
+            <strong>Rs 499</strong>
+            <span>one-time</span>
+          </div>
+          <p>Buy once, then claim a signed API key from the paid order when you are ready to use the shared endpoints.</p>
+          <ul class="pricing-checks">
             <li>Signed compiler bundles from <code>POST /v1/compile</code></li>
             <li>Signed portability reports from <code>POST /v1/lint</code></li>
             <li>Signed normalization results from <code>POST /v1/normalize</code></li>
-            <li>Self-serve claim flow after a Polar purchase</li>
+            <li>Self-serve claim flow after Polar checkout</li>
           </ul>
           <div class="actions">
             ${checkoutMarkup}
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/openapi.json">OpenAPI spec</a>
           </div>
+        </aside>
+      </section>
+      <section class="split-panel section">
+        <article class="glass-panel">
+          <div class="eyebrow compiler-kicker">Claim flow</div>
+          <h2>Checkout is not the last step. Claiming the key is.</h2>
+          <p>After purchase, the buyer claims a signed API key directly from the Polar order. That keeps the flow self-serve and machine-friendly.</p>
+          ${renderCodeBlock(claimSnippet)}
+        </article>
+        <article class="glass-panel dark">
+          <div class="eyebrow compiler-kicker">Free path</div>
+          <h2>Use the SDK locally for free.</h2>
+          <p>Evaluate portability, validation, and compilation before paying anything.</p>
+          ${renderCodeBlock(`${PUBLIC_INSTALL_COMMAND}
+schema-gateway lint --schema ./schema.json --target openai,gemini`)}
         </article>
       </section>`
   });
