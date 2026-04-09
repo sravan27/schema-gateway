@@ -462,6 +462,7 @@ function renderCompilerDemoScript(baseUrl: string): string {
   const rawOutput = document.getElementById("demo-raw-output");
   const useSampleButton = document.getElementById("demo-use-sample");
   const runButton = document.getElementById("demo-run");
+  const targetToggles = Array.from(document.querySelectorAll("[data-demo-target]"));
   const endpoint = ${JSON.stringify(`${baseUrl}/v1/demo/compile`)};
   const sampleSchema = ${JSON.stringify(JSON.stringify(DEMO_SAMPLE_SCHEMA, null, 2))};
 
@@ -516,6 +517,22 @@ function renderCompilerDemoScript(baseUrl: string): string {
   function setStatus(message, variant) {
     status.textContent = message;
     status.dataset.variant = variant;
+  }
+
+  function syncTargetToggles() {
+    const activeTargets = new Set(
+      targetsField.value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    );
+
+    for (const toggle of targetToggles) {
+      const target = toggle.getAttribute("data-demo-target");
+      const active = !!target && activeTargets.has(target);
+      toggle.setAttribute("aria-pressed", active ? "true" : "false");
+      toggle.classList.toggle("is-active", active);
+    }
   }
 
   function renderError(message, rawValue) {
@@ -738,9 +755,35 @@ function renderCompilerDemoScript(baseUrl: string): string {
   useSampleButton?.addEventListener("click", () => {
     schemaField.value = sampleSchema;
     targetsField.value = ${JSON.stringify(DEMO_DEFAULT_TARGETS.join(","))};
+    syncTargetToggles();
     setStatus("Sample schema loaded. Run the free demo to see provider-ready output.", "idle");
   });
 
+  targetToggles.forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const target = toggle.getAttribute("data-demo-target");
+      if (!target) {
+        return;
+      }
+
+      const targets = targetsField.value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      const targetSet = new Set(targets);
+
+      if (targetSet.has(target) && targetSet.size > 1) {
+        targetSet.delete(target);
+      } else {
+        targetSet.add(target);
+      }
+
+      targetsField.value = Array.from(targetSet).join(",");
+      syncTargetToggles();
+    });
+  });
+
+  syncTargetToggles();
   setStatus("Loading a sample compile run...", "loading");
   void runDemo();
 })();
@@ -1170,6 +1213,9 @@ function renderMarketingPage(context: {
           radial-gradient(circle at top right, rgba(116, 188, 255, 0.14), transparent 24%),
           linear-gradient(180deg, #fffdfa 0%, #f7f1e7 100%);
       }
+      .compiler-lab-copy {
+        max-width: 44rem;
+      }
       .compiler-lab [data-variant="error"] {
         color: #9f2b1c;
       }
@@ -1204,26 +1250,42 @@ function renderMarketingPage(context: {
       }
       .compiler-lab-grid {
         display: grid;
-        grid-template-columns: minmax(280px, 0.82fr) minmax(0, 1.18fr);
-        gap: 18px;
+        grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+        gap: 16px;
       }
       .compiler-form-shell,
       .compiler-output-shell {
         display: grid;
         gap: 16px;
         padding: 20px;
-        border-radius: 24px;
-        background: rgba(255, 255, 255, 0.88);
+        border-radius: 26px;
         border: 1px solid var(--border);
+      }
+      .compiler-form-shell {
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 24%),
+          linear-gradient(180deg, #12191d 0%, #172026 100%);
+        color: #eef4f2;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+      }
+      .compiler-form-shell .field-label,
+      .compiler-form-shell .meta,
+      .compiler-form-shell .eyebrow {
+        color: rgba(238, 244, 242, 0.7);
+      }
+      .compiler-output-shell {
+        background: rgba(255, 255, 255, 0.88);
       }
       .compiler-form-shell input,
       .compiler-form-shell textarea {
-        border-color: var(--border);
-        background: rgba(255, 255, 255, 0.92);
-        color: var(--ink);
+        border-color: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        color: #f5faf8;
       }
       .compiler-form-shell textarea {
-        min-height: 280px;
+        min-height: 360px;
+        border-radius: 20px;
+        padding: 18px;
       }
       .compiler-output-shell pre {
         min-height: 0;
@@ -1240,6 +1302,61 @@ function renderMarketingPage(context: {
       .compiler-output-caption {
         color: var(--muted);
         font-size: 0.95rem;
+      }
+      .demo-target-picker {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .demo-target-toggle {
+        display: inline-flex;
+        align-items: center;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 999px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        color: rgba(238, 244, 242, 0.8);
+        cursor: pointer;
+        font: inherit;
+      }
+      .demo-target-toggle.is-active {
+        background: rgba(22, 104, 106, 0.22);
+        border-color: rgba(117, 224, 214, 0.22);
+        color: #eafaf6;
+      }
+      .demo-hidden-input {
+        display: none;
+      }
+      .compiler-form-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+      .compiler-form-title {
+        display: grid;
+        gap: 6px;
+      }
+      .compiler-form-title p {
+        margin: 0;
+        font-size: 0.98rem;
+        color: rgba(238, 244, 242, 0.72);
+      }
+      .compiler-run-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .compiler-form-shell .primary,
+      .compiler-form-shell .secondary {
+        min-height: 42px;
+        border-radius: 14px;
+      }
+      .compiler-form-shell .secondary {
+        background: rgba(255, 255, 255, 0.92);
+        color: var(--ink);
       }
       .compiler-note-grid {
         display: grid;
@@ -1433,6 +1550,7 @@ function renderMarketingPage(context: {
         padding: 14px;
         font-size: 0.84rem;
         max-height: 380px;
+        overflow: auto;
       }
       .demo-raw-shell {
         border-top: 1px solid var(--border);
@@ -1485,7 +1603,6 @@ function renderMarketingPage(context: {
         }
         .compiler-hero-shell,
         .compiler-lab-grid,
-        .compiler-benefits,
         .compiler-note-grid {
           grid-template-columns: 1fr;
         }
@@ -1829,23 +1946,9 @@ function renderCompilerPage(baseUrl: string): string {
           </p>
         </aside>
       </section>
-      <section class="compiler-benefits">
-        <article class="compiler-benefit">
-          <div class="eyebrow">Less glue code</div>
-          <p>Write one schema once, then emit provider-ready request bodies instead of maintaining per-vendor wrappers.</p>
-        </article>
-        <article class="compiler-benefit">
-          <div class="eyebrow">Earlier failure</div>
-          <p>Catch portability drift in a compiler step before it turns into vague runtime failures.</p>
-        </article>
-        <article class="compiler-benefit">
-          <div class="eyebrow">Free first</div>
-          <p>Use the live demo or local CLI for evaluation, then buy the shared API only when the team actually needs it.</p>
-        </article>
-      </section>
       <section class="panel compiler-lab section" id="demo">
         <div class="compiler-lab-head">
-          <div class="stack">
+          <div class="compiler-lab-copy stack">
             <div class="eyebrow compiler-kicker">Interactive playground</div>
             <h2>Try the hosted compiler before you pay.</h2>
             <p>
@@ -1862,15 +1965,31 @@ function renderCompilerPage(baseUrl: string): string {
         </div>
         <div class="compiler-lab-grid">
           <form class="compiler-form-shell form-grid" id="demo-compile-form">
+            <div class="compiler-form-head">
+              <div class="compiler-form-title">
+                <span class="eyebrow compiler-kicker">Source schema</span>
+                <p>Pick targets, adjust the schema, and run the compiler.</p>
+              </div>
+              <div class="compiler-limit-row">
+                <span class="compiler-limit">No signup</span>
+                <span class="compiler-limit">Signed result</span>
+              </div>
+            </div>
             <label class="field" for="demo-targets">
               <span class="field-label">Targets</span>
-              <input id="demo-targets" name="targets" value="${escapeHtml(DEMO_DEFAULT_TARGETS.join(","))}" spellcheck="false">
+              <input class="demo-hidden-input" id="demo-targets" name="targets" value="${escapeHtml(DEMO_DEFAULT_TARGETS.join(","))}" spellcheck="false">
+              <div class="demo-target-picker" role="group" aria-label="Select target providers">
+                <button class="demo-target-toggle is-active" type="button" data-demo-target="openai" aria-pressed="true">OpenAI</button>
+                <button class="demo-target-toggle is-active" type="button" data-demo-target="gemini" aria-pressed="true">Gemini</button>
+                <button class="demo-target-toggle" type="button" data-demo-target="anthropic" aria-pressed="false">Anthropic</button>
+                <button class="demo-target-toggle" type="button" data-demo-target="ollama" aria-pressed="false">Ollama</button>
+              </div>
             </label>
             <label class="field" for="demo-schema">
               <span class="field-label">Schema JSON</span>
               <textarea id="demo-schema" name="schema" spellcheck="false">${escapeHtml(demoSchema)}</textarea>
             </label>
-            <div class="actions">
+            <div class="compiler-run-row">
               <button class="primary" id="demo-run" type="submit">Run free demo</button>
               <button class="secondary" id="demo-use-sample" type="button">Use sample schema</button>
               <a class="secondary" href="${escapeHtml(baseUrl)}/pricing">Buy full API</a>
@@ -1898,20 +2017,28 @@ function renderCompilerPage(baseUrl: string): string {
           </div>
         </div>
       </section>
-      <section class="compiler-note-grid section">
-        <article class="compiler-note-card">
-          <div class="eyebrow">Local path</div>
-          <p>Install from GitHub and run the compiler locally with no registry friction.</p>
-          ${renderCodeBlock(PUBLIC_INSTALL_COMMAND)}
-        </article>
-        <article class="compiler-note-card">
-          <div class="eyebrow">Hosted path</div>
-          <p>Move the same compiler behind a stable shared endpoint once multiple engineers or CI jobs need it.</p>
-          ${renderCodeBlock(`curl -X POST ${baseUrl}/v1/compile \\
+      <section class="panel section">
+        <div class="compiler-lab-head">
+          <div class="compiler-lab-copy stack">
+            <div class="eyebrow compiler-kicker">Upgrade path</div>
+            <h2>Evaluate locally. Move to the shared API when the team needs it.</h2>
+          </div>
+        </div>
+        <div class="compiler-lab-grid">
+          <article class="compiler-note-card">
+            <div class="eyebrow">Local CLI</div>
+            <p>Install from GitHub and run the compiler locally with no registry friction.</p>
+            ${renderCodeBlock(PUBLIC_INSTALL_COMMAND)}
+          </article>
+          <article class="compiler-note-card">
+            <div class="eyebrow">Hosted API</div>
+            <p>Use the same compiler behind a stable signed endpoint once CI or multiple engineers depend on it.</p>
+            ${renderCodeBlock(`curl -X POST ${baseUrl}/v1/compile \\
   -H 'content-type: application/json' \\
   -H 'x-api-key: sk_live...' \\
   -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}}},"targets":["openai","gemini"]}'`)}
-        </article>
+          </article>
+        </div>
       </section>
       ${renderCompilerDemoScript(baseUrl)}`
   });
