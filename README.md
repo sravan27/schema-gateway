@@ -23,8 +23,8 @@ Install the current SDK release without waiting for npm:
 
 ```bash
 npm install \
-  https://github.com/sravan27/schema-gateway/releases/download/v0.1.2/apex-value-schema-gateway-core-0.1.2.tgz \
-  https://github.com/sravan27/schema-gateway/releases/download/v0.1.2/apex-value-schema-gateway-0.1.2.tgz
+  https://github.com/sravan27/schema-gateway/releases/download/v0.1.3/apex-value-schema-gateway-core-0.1.3.tgz \
+  https://github.com/sravan27/schema-gateway/releases/download/v0.1.3/apex-value-schema-gateway-0.1.3.tgz
 ```
 
 ## Why this wedge
@@ -101,6 +101,15 @@ schema-gateway compile --schema ./schema.json --target openai,gemini,anthropic,o
 
 The compiler emits provider-ready request fragments for OpenAI Responses, OpenAI Chat Completions, Gemini, Anthropic tools, and Ollama.
 
+When you want the same compiler through the hosted API with signed responses:
+
+```bash
+curl -X POST https://schema-gateway.sridharsravan.workers.dev/v1/compile \
+  -H 'content-type: application/json' \
+  -H 'x-api-key: sk_live...' \
+  -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}}},"targets":["openai","gemini"]}'
+```
+
 Provider-specific examples live in:
 
 - `/Users/sravansridhar/Documents/auto-money/examples/openai-responses.ts`
@@ -149,7 +158,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: sravan27/schema-gateway/.github/actions/portability-check@v0.1.2
+      - uses: sravan27/schema-gateway/.github/actions/portability-check@v0.1.3
         with:
           schema: schema.json
           targets: openai,gemini,anthropic,ollama

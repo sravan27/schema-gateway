@@ -21,6 +21,7 @@ function usage(): string {
     "  schema-gateway lint --schema ./schema.json [--target openai,gemini]",
     "  schema-gateway lint --schema ./schema.json --remote --api-key sk_live... [--base-url https://worker.example]",
     "  schema-gateway compile --schema ./schema.json [--target openai,gemini] [--name weather_response]",
+    "  schema-gateway compile --schema ./schema.json --remote --api-key sk_live... [--base-url https://worker.example]",
     "  schema-gateway claim --order-id polar_order... --email you@example.com [--base-url https://worker.example]",
     "  schema-gateway redeem --tx-hash 0x... --label router-service [--base-url https://worker.example]",
     "  schema-gateway commitment --label router-service",
@@ -189,8 +190,11 @@ async function runCompile(options: CliOptions): Promise<void> {
   const schema = JSON.parse(schemaRaw) as Record<string, unknown>;
   const targets = parseTargets(options.target);
 
-  const client = new SchemaGatewayClient();
-  const result = await client.compileLocal({
+  const client = new SchemaGatewayClient({
+    ...(typeof options["api-key"] === "string" ? { apiKey: options["api-key"] } : {}),
+    ...(typeof options["base-url"] === "string" ? { baseUrl: options["base-url"] } : {})
+  });
+  const request = {
     schema,
     ...(targets ? { targets } : {}),
     ...(typeof options.name === "string" ? { name: options.name } : {}),
@@ -198,7 +202,10 @@ async function runCompile(options: CliOptions): Promise<void> {
     ...(typeof options.description === "string"
       ? { description: options.description }
       : {})
-  });
+  };
+  const result = options.remote
+    ? await client.compileRemote(request)
+    : await client.compileLocal(request);
 
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }

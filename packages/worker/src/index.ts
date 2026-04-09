@@ -1,5 +1,6 @@
 import {
   buildLabelCommitment,
+  compileStructuredOutputSchema,
   constantTimeEqual,
   createSignedEnvelope,
   lintStructuredOutputSchema,
@@ -55,6 +56,14 @@ const NormalizeBodySchema = z.object({
 const LintBodySchema = z.object({
   schema: z.record(z.string(), z.unknown()),
   targets: z.array(z.enum(["openai", "gemini", "anthropic", "ollama"])).optional()
+});
+
+const CompileBodySchema = z.object({
+  schema: z.record(z.string(), z.unknown()),
+  targets: z.array(z.enum(["openai", "gemini", "anthropic", "ollama"])).optional(),
+  name: z.string().min(1).max(64).optional(),
+  description: z.string().min(1).max(280).optional(),
+  prompt: z.string().min(1).max(4000).optional()
 });
 
 const RedeemBodySchema = z.object({
@@ -211,7 +220,7 @@ type ComparePage = {
 
 const PUBLIC_REPO_URL = "https://github.com/sravan27/schema-gateway";
 const PUBLIC_INDEXNOW_KEY = "0d712c316dcc009314c1cddfefaad8a2";
-const PUBLIC_RELEASE_VERSION = "0.1.2";
+const PUBLIC_RELEASE_VERSION = "0.1.3";
 const PUBLIC_RELEASE_TAG = `v${PUBLIC_RELEASE_VERSION}`;
 const PUBLIC_CORE_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_RELEASE_TAG}/apex-value-schema-gateway-core-${PUBLIC_RELEASE_VERSION}.tgz`;
 const PUBLIC_SDK_INSTALL_URL = `${PUBLIC_REPO_URL}/releases/download/${PUBLIC_RELEASE_TAG}/apex-value-schema-gateway-${PUBLIC_RELEASE_VERSION}.tgz`;
@@ -929,6 +938,13 @@ function renderCompilerPage(baseUrl: string): string {
             <li>Anthropic native <code>tools</code> definitions instead of compatibility guesswork</li>
             <li>Ollama <code>format</code> plus deterministic <code>temperature: 0</code> hints</li>
           </ul>
+          <div class="section">
+            <p class="meta">Need a shared hosted compiler for CI or multiple teams?</p>
+            ${renderCodeBlock(`curl -X POST ${baseUrl}/v1/compile \\
+  -H 'content-type: application/json' \\
+  -H 'x-api-key: sk_live...' \\
+  -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}}},"targets":["openai","gemini"]}'`)}
+          </div>
         </article>
       </section>`
   });
@@ -1100,6 +1116,7 @@ schema-gateway lint --schema ./schema.json --target openai,gemini`)}
             normalization behind a stable base URL.
           </p>
           <ul class="list">
+            <li>Signed compiler bundles from <code>POST /v1/compile</code></li>
             <li>Signed portability reports from <code>POST /v1/lint</code></li>
             <li>Signed normalization results from <code>POST /v1/normalize</code></li>
             <li>Self-serve claim flow after a Polar purchase</li>
@@ -1649,6 +1666,7 @@ Provider comparison pages:
 ${compareLines}
 
 Primary paid endpoints:
+- POST /v1/compile
 - POST /v1/lint
 - POST /v1/normalize
 - POST /v1/access/polar/claim
@@ -2009,8 +2027,50 @@ const requireApiKey: MiddlewareHandler<{ Bindings: Bindings; Variables: Variable
   await next();
 };
 
+app.use("/v1/compile", requireApiKey);
 app.use("/v1/normalize", requireApiKey);
 app.use("/v1/lint", requireApiKey);
+
+app.post("/v1/compile", async (context) => {
+  const body = CompileBodySchema.parse(await context.req.json());
+  const accessPayload = context.get("accessPayload");
+  const keyId = context.get("keyId");
+  const record = context.get("keyRecord");
+  const bundle = await compileStructuredOutputSchema({
+    schema: body.schema,
+    ...(body.targets ? { targets: body.targets as SchemaPortabilityTarget[] } : {}),
+    ...(body.name ? { name: body.name } : {}),
+    ...(body.description ? { description: body.description } : {}),
+    ...(body.prompt ? { prompt: body.prompt } : {})
+  });
+  const updatedRecord = await spendCredit(context.env, record);
+
+  const signature = await createSignedEnvelope(context.env.ISSUER_SECRET, {
+    keyId,
+    schemaHash: bundle.schemaHash,
+    name: bundle.name,
+    providers: bundle.providers.map((provider) => ({
+      provider: provider.provider,
+      compatible: provider.compatible,
+      score: provider.score,
+      variants: provider.variants.map((variant) => variant.key)
+    })),
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    expiresAt: accessPayload?.expiresAt
+  });
+
+  return context.json({
+    ...bundle,
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    signature,
+    ...(accessPayload
+      ? {
+          accessMode: "stateless",
+          expiresAt: accessPayload.expiresAt
+        }
+      : {})
+  });
+});
 
 app.post("/v1/normalize", async (context) => {
   const body = NormalizeBodySchema.parse(await context.req.json());

@@ -57,6 +57,13 @@ export interface RemoteLintResponse extends SchemaPortabilityReport {
   expiresAt?: string;
 }
 
+export interface RemoteCompileResponse extends SchemaCompilationBundle {
+  remainingCredits: number | null;
+  signature: `0x${string}`;
+  accessMode?: string;
+  expiresAt?: string;
+}
+
 export class SchemaGatewayClient {
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
@@ -173,6 +180,30 @@ export class SchemaGatewayClient {
       }
 
       return (await response.json()) as RemoteLintResponse;
+    });
+  }
+
+  async compileRemote(request: CompileSchemaRequest): Promise<RemoteCompileResponse> {
+    const apiKey = this.apiKey;
+    if (!apiKey) {
+      throw new Error("An API key is required for remote schema compilation.");
+    }
+
+    return withRetry(async () => {
+      const response = await this.fetchImpl(`${this.baseUrl}/v1/compile`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Schema Gateway returned ${response.status} for /v1/compile.`);
+      }
+
+      return (await response.json()) as RemoteCompileResponse;
     });
   }
 }

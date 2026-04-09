@@ -2,7 +2,7 @@ export const openApiDocument = {
   openapi: "3.1.0",
   info: {
     title: "Schema Gateway API",
-    version: "0.1.2",
+    version: "0.1.3",
     description:
       "Prepaid machine-to-machine API for structured output normalization, repair, and signed responses."
   },
@@ -147,6 +147,58 @@ export const openApiDocument = {
         responses: {
           "200": {
             description: "Signed normalization result"
+          },
+          "401": {
+            description: "Missing or invalid API key"
+          },
+          "402": {
+            description: "API key has no credits remaining"
+          }
+        }
+      }
+    },
+    "/v1/compile": {
+      post: {
+        summary: "Compile a schema into provider-ready request fragments",
+        description:
+          "Returns provider-specific request payloads for OpenAI, Gemini, Anthropic, and Ollama, together with signed metadata and remaining credits.",
+        security: [{ apiKeyHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  schema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  targets: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["openai", "gemini", "anthropic", "ollama"]
+                    }
+                  },
+                  name: {
+                    type: "string"
+                  },
+                  description: {
+                    type: "string"
+                  },
+                  prompt: {
+                    type: "string"
+                  }
+                },
+                required: ["schema"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Signed provider compilation bundle"
           },
           "401": {
             description: "Missing or invalid API key"

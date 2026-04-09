@@ -189,8 +189,8 @@ describe("worker", () => {
     expect(installResponse.status).toBe(200);
     const installHtml = await installResponse.text();
     expect(installHtml).toContain("Install Schema Gateway straight from the public release");
-    expect(installHtml).toContain("apex-value-schema-gateway-core-0.1.2.tgz");
-    expect(installHtml).toContain("apex-value-schema-gateway-0.1.2.tgz");
+    expect(installHtml).toContain("apex-value-schema-gateway-core-0.1.3.tgz");
+    expect(installHtml).toContain("apex-value-schema-gateway-0.1.3.tgz");
 
     const compilerResponse = await app.request("http://example.test/compiler", {}, env);
     expect(compilerResponse.status).toBe(200);
@@ -357,6 +357,120 @@ describe("worker", () => {
     expect(linted.providers[1]?.normalizedSchema).toMatchObject({
       propertyOrdering: ["city", "units"]
     });
+  });
+
+  it("returns a signed schema compilation bundle and spends one credit", async () => {
+    const env: Bindings = {
+      ACCESS_TTL_SECONDS: "3600",
+      ALLOW_EPHEMERAL_STORAGE: "true",
+      CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000abc",
+      ISSUER_SECRET: "test-secret",
+      RPC_URL: "https://rpc.example"
+    };
+
+    const txHash = "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" as const;
+    const label = "compile-service";
+    const commitment = await buildLabelCommitment(label);
+    const topics = encodeEventTopics({
+      abi: [purchaseEventAbiItem],
+      eventName: "Purchase",
+      args: {
+        buyer: "0x0000000000000000000000000000000000000def",
+        token: "0x0000000000000000000000000000000000000000",
+        keyCommitment: commitment
+      }
+    });
+    const data = encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "uint256" }
+      ],
+      [15n, 3n]
+    );
+
+    globalThis.fetch = vi.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            logs: [
+              {
+                address: env.CONTRACT_ADDRESS,
+                topics,
+                data
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }) as typeof fetch;
+
+    const redeemResponse = await app.request(
+      "http://example.test/v1/access/redeem",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          txHash,
+          label
+        })
+      },
+      env
+    );
+    const redeemed = (await redeemResponse.json()) as {
+      apiKey: string;
+    };
+
+    const compileResponse = await app.request(
+      "http://example.test/v1/compile",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": redeemed.apiKey
+        },
+        body: JSON.stringify({
+          schema: {
+            type: "object",
+            properties: {
+              city: { type: "string" }
+            },
+            required: []
+          },
+          targets: ["openai", "gemini"],
+          name: "weather_response"
+        })
+      },
+      env
+    );
+
+    expect(compileResponse.status).toBe(200);
+    const compiled = (await compileResponse.json()) as {
+      schemaHash: string;
+      name: string;
+      providers: Array<{
+        provider: string;
+        variants: Array<{ key: string }>;
+      }>;
+      remainingCredits: number;
+      signature: string;
+    };
+
+    expect(compiled.schemaHash).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(compiled.name).toBe("weather_response");
+    expect(compiled.signature).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(compiled.remainingCredits).toBe(2);
+    expect(compiled.providers[0]?.variants[0]?.key).toBe("responses_api");
+    expect(compiled.providers[1]?.variants[0]?.key).toBe("generate_content");
   });
 
   it("claims stateless Polar access and uses it without KV storage", async () => {
