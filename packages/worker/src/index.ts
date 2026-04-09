@@ -540,6 +540,9 @@ function renderCompilerDemoScript(baseUrl: string): string {
     targetsField.value = ${JSON.stringify(DEMO_DEFAULT_TARGETS.join(","))};
     setStatus("Sample schema loaded. Run the free demo to see provider-ready output.", "idle");
   });
+
+  setStatus("Loading a sample compile run...", "loading");
+  void runDemo();
 })();
 </script>`;
 }
@@ -763,6 +766,8 @@ function renderMarketingPage(context: {
         padding: 16px;
         background: #132028;
         color: #f4efe5;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
       }
       code {
         font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
@@ -818,6 +823,248 @@ function renderMarketingPage(context: {
         display: grid;
         gap: 12px;
       }
+      .compiler-hero-shell {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+        gap: 18px;
+        overflow: hidden;
+      }
+      .compiler-hero-copy {
+        position: relative;
+        gap: 20px;
+        padding: 36px;
+        background:
+          radial-gradient(circle at top left, rgba(15, 118, 110, 0.18), transparent 34%),
+          linear-gradient(150deg, #fffdf7 0%, #f6efe1 100%);
+      }
+      .compiler-kicker {
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 0.82rem;
+      }
+      .compiler-lede {
+        max-width: 34rem;
+        font-size: 1.14rem;
+      }
+      .compiler-stat-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 12px;
+      }
+      .compiler-stat {
+        display: grid;
+        gap: 4px;
+        padding: 14px 16px;
+        border-radius: 18px;
+        background: rgba(255, 255, 255, 0.74);
+        border: 1px solid rgba(15, 118, 110, 0.14);
+      }
+      .compiler-stat strong {
+        font-size: 1.05rem;
+      }
+      .compiler-stat span {
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+      .compiler-hero-note {
+        font-size: 0.96rem;
+        color: var(--muted);
+      }
+      .compiler-preview {
+        display: grid;
+        gap: 16px;
+        padding: 28px;
+        background:
+          radial-gradient(circle at top right, rgba(72, 196, 170, 0.18), transparent 30%),
+          linear-gradient(180deg, #142028 0%, #0f171d 100%);
+        color: #ecf6f3;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .compiler-preview .eyebrow,
+      .compiler-preview .meta {
+        color: rgba(236, 246, 243, 0.72);
+      }
+      .compiler-chip-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .compiler-chip {
+        display: grid;
+        gap: 4px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .compiler-chip strong {
+        font-size: 0.94rem;
+      }
+      .compiler-chip span {
+        color: rgba(236, 246, 243, 0.7);
+        font-size: 0.86rem;
+      }
+      .compiler-window {
+        display: grid;
+        gap: 0;
+        border-radius: 20px;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(0, 0, 0, 0.2);
+      }
+      .compiler-window-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 14px;
+        background: rgba(255, 255, 255, 0.05);
+      }
+      .compiler-window-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.3);
+      }
+      .compiler-window-label {
+        margin-left: auto;
+        color: rgba(236, 246, 243, 0.66);
+        font-size: 0.82rem;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .compiler-window pre {
+        border-radius: 0;
+        padding: 18px;
+        background: transparent;
+      }
+      .compiler-grid {
+        display: grid;
+        gap: 18px;
+      }
+      .compiler-benefits {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 14px;
+        margin-top: 18px;
+      }
+      .compiler-benefit {
+        display: grid;
+        gap: 10px;
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.68);
+        border: 1px solid var(--border);
+      }
+      .compiler-benefit p {
+        margin: 0;
+        font-size: 1rem;
+      }
+      .compiler-lab {
+        display: grid;
+        gap: 22px;
+        padding: 30px;
+        background:
+          radial-gradient(circle at top right, rgba(72, 196, 170, 0.14), transparent 28%),
+          linear-gradient(145deg, #102029 0%, #13232d 55%, #162f31 100%);
+        color: #eef7f4;
+        border-color: rgba(255, 255, 255, 0.06);
+      }
+      .compiler-lab h2,
+      .compiler-lab p,
+      .compiler-lab .field-label,
+      .compiler-lab .meta,
+      .compiler-lab .eyebrow {
+        color: inherit;
+      }
+      .compiler-lab [data-variant="error"] {
+        color: #ffb5a6;
+      }
+      .compiler-lab [data-variant="success"] {
+        color: #99f4d2;
+      }
+      .compiler-lab [data-variant="loading"] {
+        color: #ffe29a;
+      }
+      .compiler-lab-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 18px;
+        flex-wrap: wrap;
+      }
+      .compiler-limit-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .compiler-limit {
+        display: inline-flex;
+        align-items: center;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        font-size: 0.9rem;
+        color: rgba(238, 247, 244, 0.86);
+      }
+      .compiler-lab-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+        gap: 18px;
+      }
+      .compiler-form-shell,
+      .compiler-output-shell {
+        display: grid;
+        gap: 16px;
+        padding: 22px;
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(10px);
+      }
+      .compiler-form-shell input,
+      .compiler-form-shell textarea {
+        border-color: rgba(255, 255, 255, 0.12);
+        background: rgba(10, 19, 25, 0.42);
+        color: #f3faf8;
+      }
+      .compiler-form-shell textarea {
+        min-height: 360px;
+      }
+      .compiler-output-shell pre {
+        min-height: 440px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(7, 12, 15, 0.48);
+      }
+      .compiler-output-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+      .compiler-output-caption {
+        color: rgba(238, 247, 244, 0.76);
+        font-size: 0.95rem;
+      }
+      .compiler-note-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .compiler-note-card {
+        display: grid;
+        gap: 8px;
+        padding: 20px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.72);
+        border: 1px solid var(--border);
+      }
+      .compiler-note-card p {
+        margin: 0;
+        font-size: 1rem;
+      }
       [data-variant="error"] {
         color: #9f2b1c;
       }
@@ -830,6 +1077,18 @@ function renderMarketingPage(context: {
       @media (max-width: 840px) {
         .hero {
           grid-template-columns: 1fr;
+        }
+        .compiler-hero-shell,
+        .compiler-lab-grid,
+        .compiler-benefits,
+        .compiler-note-grid {
+          grid-template-columns: 1fr;
+        }
+        .compiler-chip-grid {
+          grid-template-columns: 1fr;
+        }
+        .compiler-output-header {
+          align-items: flex-start;
         }
       }
     </style>
@@ -1073,54 +1332,128 @@ function renderInstallPage(baseUrl: string): string {
 
 function renderCompilerPage(baseUrl: string): string {
   const demoSchema = JSON.stringify(DEMO_SAMPLE_SCHEMA, null, 2);
+  const previewSnippet = `{
+  "openai": {
+    "text": {
+      "format": {
+        "type": "json_schema",
+        "name": "schema_gateway_output"
+      }
+    }
+  },
+  "gemini": {
+    "generationConfig": {
+      "responseMimeType": "application/json"
+    }
+  }
+}`;
   return renderMarketingPage({
     baseUrl,
     path: "/compiler",
     title: "Schema Gateway Compiler | Generate provider-ready payloads",
     description:
       "Compile one JSON schema into provider-ready request fragments for OpenAI, Gemini, Anthropic, and Ollama.",
-    body: `<section class="grid">
-        <article class="panel stack">
-          <div class="eyebrow">Schema compiler</div>
+    body: `<section class="panel compiler-hero-shell">
+        <article class="compiler-hero-copy stack">
+          <div class="eyebrow compiler-kicker">Schema compiler</div>
           <h1>Turn one schema into provider-ready request payloads.</h1>
-          <p>
-            The compiler takes the same normalized schema report and emits request fragments you can
-            paste into OpenAI, Gemini, Anthropic, or Ollama integrations without hand-translating
-            each provider's request shape.
+          <p class="compiler-lede">
+            Stop hand-translating JSON Schema into four incompatible request shapes. Schema Gateway
+            compiles one source schema into vendor-ready fragments for OpenAI, Gemini, Anthropic,
+            and Ollama, then gives you a shared API when local scripts stop being enough.
           </p>
+          <div class="compiler-stat-row">
+            <div class="compiler-stat">
+              <strong>4 providers</strong>
+              <span>compiled from one schema definition</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>1 live demo</strong>
+              <span>hosted proof before anyone pays</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>Signed output</strong>
+              <span>for teams that need shared enforcement</span>
+            </div>
+          </div>
           ${renderCodeBlock(PUBLIC_COMPILE_SNIPPET)}
           <div class="actions">
-            <a class="primary" href="${escapeHtml(baseUrl)}/install">Install the CLI</a>
-            <a class="secondary" href="${escapeHtml(PUBLIC_REPO_URL)}/releases/tag/${PUBLIC_RELEASE_TAG}">Open release ${escapeHtml(PUBLIC_RELEASE_TAG)}</a>
+            <a class="primary" href="${escapeHtml(baseUrl)}/compiler#demo">Run free live demo</a>
+            <a class="secondary" href="${escapeHtml(baseUrl)}/install">Install the CLI</a>
+            <a class="secondary" href="${escapeHtml(baseUrl)}/pricing">Buy full API</a>
+          </div>
+          <div class="compiler-hero-note">
+            Public release <a href="${escapeHtml(PUBLIC_REPO_URL)}/releases/tag/${PUBLIC_RELEASE_TAG}">${escapeHtml(PUBLIC_RELEASE_TAG)}</a> is live, and the hosted compiler is available at <code>POST /v1/compile</code>.
           </div>
         </article>
-        <article class="panel stack">
+        <aside class="compiler-preview">
           <div class="eyebrow">What comes out</div>
-          <ul class="list">
-            <li>OpenAI Responses and Chat Completions fragments</li>
-            <li>Gemini <code>generationConfig.responseJsonSchema</code> payloads</li>
-            <li>Anthropic native <code>tools</code> definitions instead of compatibility guesswork</li>
-            <li>Ollama <code>format</code> plus deterministic <code>temperature: 0</code> hints</li>
-          </ul>
-          <div class="section">
-            <p class="meta">Need a shared hosted compiler for CI or multiple teams?</p>
-            ${renderCodeBlock(`curl -X POST ${baseUrl}/v1/compile \\
-  -H 'content-type: application/json' \\
-  -H 'x-api-key: sk_live...' \\
-  -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}}},"targets":["openai","gemini"]}'`)}
+          <div class="compiler-chip-grid">
+            <div class="compiler-chip">
+              <strong>OpenAI</strong>
+              <span>Responses and Chat Completions fragments</span>
+            </div>
+            <div class="compiler-chip">
+              <strong>Gemini</strong>
+              <span><code>responseJsonSchema</code> plus ordering fixes</span>
+            </div>
+            <div class="compiler-chip">
+              <strong>Anthropic</strong>
+              <span>Native <code>tools</code> definitions instead of compatibility guesses</span>
+            </div>
+            <div class="compiler-chip">
+              <strong>Ollama</strong>
+              <span><code>format</code> payloads with stable inference hints</span>
+            </div>
           </div>
+          <div class="compiler-window">
+            <div class="compiler-window-bar">
+              <span class="compiler-window-dot"></span>
+              <span class="compiler-window-dot"></span>
+              <span class="compiler-window-dot"></span>
+              <span class="compiler-window-label">Compiled preview</span>
+            </div>
+            ${renderCodeBlock(previewSnippet)}
+          </div>
+          <p class="meta">
+            Need a shared hosted compiler for CI or multiple teams? The paid API returns the same
+            compiled bundle with a signature and stable base URL.
+          </p>
+        </aside>
+      </section>
+      <section class="compiler-benefits">
+        <article class="compiler-benefit">
+          <div class="eyebrow">No hand-mapping</div>
+          <p>Write one schema once, then ship provider-ready request bodies without per-vendor glue code.</p>
+        </article>
+        <article class="compiler-benefit">
+          <div class="eyebrow">Earlier failure</div>
+          <p>Catch portability drift in a compiler step before it turns into mysterious runtime errors.</p>
+        </article>
+        <article class="compiler-benefit">
+          <div class="eyebrow">Free first</div>
+          <p>Use the live demo or local CLI for evaluation, then buy the shared API only when the team needs it.</p>
         </article>
       </section>
-      <section class="grid section" id="demo">
-        <article class="panel stack">
-          <div class="eyebrow">Free live demo</div>
-          <h2>Run the hosted compiler before you pay.</h2>
-          <p>
-            This public demo is intentionally constrained: compile only, small schemas, and no
-            API key. It exists to prove the value of the hosted compiler before a team buys the
-            signed API.
-          </p>
-          <form class="form-grid" id="demo-compile-form">
+      <section class="panel compiler-lab section" id="demo">
+        <div class="compiler-lab-head">
+          <div class="stack">
+            <div class="eyebrow compiler-kicker">Interactive playground</div>
+            <h2>Run the hosted compiler before you pay.</h2>
+            <p>
+              This public demo is intentionally constrained, but it is real: compile only, small
+              schemas, no API key, signed response. It exists so the product proves itself before a
+              buyer ever touches checkout.
+            </p>
+          </div>
+          <div class="compiler-limit-row">
+            <span class="compiler-limit">12 KB request</span>
+            <span class="compiler-limit">6 KB schema</span>
+            <span class="compiler-limit">Compile only</span>
+          </div>
+        </div>
+        <div class="compiler-lab-grid">
+          <form class="compiler-form-shell form-grid" id="demo-compile-form">
             <label class="field" for="demo-targets">
               <span class="field-label">Targets</span>
               <input id="demo-targets" name="targets" value="${escapeHtml(DEMO_DEFAULT_TARGETS.join(","))}" spellcheck="false">
@@ -1135,22 +1468,38 @@ function renderCompilerPage(baseUrl: string): string {
               <a class="secondary" href="${escapeHtml(baseUrl)}/pricing">Buy full API</a>
             </div>
           </form>
-        </article>
-        <article class="panel stack">
-          <div class="eyebrow">Live output</div>
-          <div class="result-shell">
-            <p class="meta" data-variant="idle" id="demo-status">
-              The demo endpoint compiles small schemas and signs the result so buyers can validate
-              the hosted path without installing anything.
-            </p>
+          <div class="compiler-output-shell">
+            <div class="compiler-output-header">
+              <div class="stack">
+                <div class="eyebrow compiler-kicker">Live output</div>
+                <div class="compiler-output-caption">
+                  The sample run loads automatically so the page shows value immediately instead of
+                  sitting empty.
+                </div>
+              </div>
+              <p class="meta" data-variant="loading" id="demo-status">Loading a sample compile run...</p>
+            </div>
             <pre><code id="demo-output"></code></pre>
+            <div class="compiler-output-caption">
+              Paid access unlocks the signed shared endpoints for <code>/v1/compile</code>,
+              <code>/v1/lint</code>, and <code>/v1/normalize</code>.
+            </div>
           </div>
-          <p class="meta">
-            Demo limits: request body up to ${DEMO_MAX_BODY_BYTES.toLocaleString()} bytes, schema up
-            to ${DEMO_MAX_SCHEMA_BYTES.toLocaleString()} bytes, compile only. Paid access unlocks
-            signed shared endpoints for <code>/v1/compile</code>, <code>/v1/lint</code>, and
-            <code>/v1/normalize</code>.
-          </p>
+        </div>
+      </section>
+      <section class="compiler-note-grid section">
+        <article class="compiler-note-card">
+          <div class="eyebrow">Local path</div>
+          <p>Install from GitHub and run the compiler in your own workflow with no registry friction.</p>
+          ${renderCodeBlock(PUBLIC_INSTALL_COMMAND)}
+        </article>
+        <article class="compiler-note-card">
+          <div class="eyebrow">Hosted path</div>
+          <p>Move the same compiler behind a stable shared endpoint once multiple engineers or CI jobs need it.</p>
+          ${renderCodeBlock(`curl -X POST ${baseUrl}/v1/compile \\
+  -H 'content-type: application/json' \\
+  -H 'x-api-key: sk_live...' \\
+  -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}}},"targets":["openai","gemini"]}'`)}
         </article>
       </section>
       ${renderCompilerDemoScript(baseUrl)}`
