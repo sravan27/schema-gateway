@@ -1,12 +1,41 @@
 # Schema Gateway
 
-`Schema Gateway` is a machine-to-machine API for one of the loudest integration failures in current AI stacks: provider-specific structured output drift. The codebase includes:
+[![CI](https://github.com/sravan27/schema-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/sravan27/schema-gateway/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/sravan27/schema-gateway?display_name=tag)](https://github.com/sravan27/schema-gateway/releases)
+[![Live Demo](https://img.shields.io/badge/live-demo-0f766e)](https://schema-gateway.sridharsravan.workers.dev/compiler#demo)
+[![Buy Access](https://img.shields.io/badge/buy-starter%20access-111827)](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK)
+[![Claim Access](https://img.shields.io/badge/claim-paid%20key-f3f4f6?logo=cloudflare&logoColor=f97316&labelColor=111827)](https://schema-gateway.sridharsravan.workers.dev/claim)
+
+Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini, Anthropic, and Ollama, then catch portability drift before it breaks CI or production.
+
+[Install from GitHub release](https://schema-gateway.sridharsravan.workers.dev/install) · [Run the live compiler demo](https://schema-gateway.sridharsravan.workers.dev/compiler#demo) · [Buy starter access](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK) · [Claim a paid key](https://schema-gateway.sridharsravan.workers.dev/claim)
+
+![Schema Gateway hero](docs/assets/readme-hero.png)
+
+`Schema Gateway` is the portability layer between your JSON Schema and the model APIs that keep interpreting it differently. The codebase includes:
 
 - a free SDK for local schema validation and tool-call normalization
 - a schema portability linter that rewrites one schema into provider-safe variants
 - a Cloudflare Worker for paid, signed normalization responses
 - a Solidity paywall contract that accepts native or ERC-20 payments and emits receipts the Worker can redeem into API keys
 - a Polar billing path for legal fiat checkout and API-key provisioning
+
+## Why teams care
+
+- one schema in, four provider-ready request shapes out
+- free-first adoption through the local CLI, SDK, GitHub Action, and hosted demo
+- paid only when teams need one shared signed API surface for CI or multiple engineers
+- self-serve activation through a paid order claim flow instead of manual provisioning
+
+## Fast paths
+
+| Goal | Path |
+| --- | --- |
+| Prove the value in under a minute | [Run the free demo compiler](https://schema-gateway.sridharsravan.workers.dev/compiler#demo) |
+| Install without waiting on npm | [Use the release installer](https://schema-gateway.sridharsravan.workers.dev/install) |
+| Add a portability check to CI | [Use the reusable GitHub Action](https://schema-gateway.sridharsravan.workers.dev/ci) |
+| Buy the hosted API | [Starter access checkout](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK) |
+| Turn a paid order into a real key | [Claim API access](https://schema-gateway.sridharsravan.workers.dev/claim) |
 
 Live surfaces:
 
@@ -17,6 +46,7 @@ Live surfaces:
 - GitHub CI: [https://schema-gateway.sridharsravan.workers.dev/ci](https://schema-gateway.sridharsravan.workers.dev/ci)
 - Install: [https://schema-gateway.sridharsravan.workers.dev/install](https://schema-gateway.sridharsravan.workers.dev/install)
 - Pricing: [https://schema-gateway.sridharsravan.workers.dev/pricing](https://schema-gateway.sridharsravan.workers.dev/pricing)
+- Claim: [https://schema-gateway.sridharsravan.workers.dev/claim](https://schema-gateway.sridharsravan.workers.dev/claim)
 - OpenAPI: [https://schema-gateway.sridharsravan.workers.dev/openapi.json](https://schema-gateway.sridharsravan.workers.dev/openapi.json)
 - Checkout: [https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK)
 
@@ -28,7 +58,16 @@ npm install \
   https://github.com/sravan27/schema-gateway/releases/download/v0.1.3/apex-value-schema-gateway-0.1.3.tgz
 ```
 
-## Why this wedge
+## Provider targets
+
+Schema Gateway is built around the current structured-output surfaces that teams actually have to support:
+
+- OpenAI Structured Outputs: [https://developers.openai.com/api/docs/guides/structured-outputs](https://developers.openai.com/api/docs/guides/structured-outputs)
+- Gemini Structured Output: [https://ai.google.dev/gemini-api/docs/structured-output](https://ai.google.dev/gemini-api/docs/structured-output)
+- Anthropic OpenAI SDK compatibility: [https://platform.claude.com/docs/en/api/openai-sdk](https://platform.claude.com/docs/en/api/openai-sdk)
+- Ollama Structured Outputs: [https://docs.ollama.com/capabilities/structured-outputs](https://docs.ollama.com/capabilities/structured-outputs)
+
+## Why now
 
 The product choice is based on current merged PR and research signals from March 9, 2026 through April 8, 2026:
 

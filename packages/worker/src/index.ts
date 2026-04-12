@@ -425,6 +425,7 @@ function renderSiteNav(baseUrl: string): string {
       <a href="${escapeHtml(baseUrl)}/ci">CI</a>
       <a href="${escapeHtml(baseUrl)}/install">Install</a>
       <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
+      <a href="${escapeHtml(baseUrl)}/claim">Claim</a>
       <a href="${escapeHtml(baseUrl)}/openapi.json">OpenAPI</a>
       <a href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
     </div>
@@ -441,6 +442,7 @@ function renderSiteFooter(baseUrl: string): string {
       <a href="${escapeHtml(baseUrl)}/ci">CI</a>
       <a href="${escapeHtml(baseUrl)}/install">Install</a>
       <a href="${escapeHtml(baseUrl)}/pricing">Pricing</a>
+      <a href="${escapeHtml(baseUrl)}/claim">Claim</a>
       <a href="${escapeHtml(baseUrl)}/llms.txt">llms.txt</a>
       <a href="${escapeHtml(PUBLIC_REPO_URL)}">GitHub</a>
     </div>
@@ -786,6 +788,313 @@ function renderCompilerDemoScript(baseUrl: string): string {
   syncTargetToggles();
   setStatus("Loading a sample compile run...", "loading");
   void runDemo();
+})();
+</script>`;
+}
+
+function renderClaimPageScript(baseUrl: string): string {
+  return `<script>
+(() => {
+  const form = document.getElementById("claim-access-form");
+  const orderIdField = document.getElementById("claim-order-id");
+  const emailField = document.getElementById("claim-email");
+  const status = document.getElementById("claim-status");
+  const result = document.getElementById("claim-result");
+  const sampleSchema = ${JSON.stringify(DEMO_SAMPLE_SCHEMA)};
+  const claimEndpoint = ${JSON.stringify(`${baseUrl}/v1/access/polar/claim`)};
+  const compileEndpoint = ${JSON.stringify(`${baseUrl}/v1/compile`)};
+
+  if (!(form instanceof HTMLFormElement) || !(orderIdField instanceof HTMLInputElement) || !(emailField instanceof HTMLInputElement) || !(status instanceof HTMLElement) || !(result instanceof HTMLElement)) {
+    return;
+  }
+
+  function clearNode(node) {
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  }
+
+  function makeNode(tagName, className, text) {
+    const node = document.createElement(tagName);
+    if (className) {
+      node.className = className;
+    }
+    if (typeof text === "string") {
+      node.textContent = text;
+    }
+    return node;
+  }
+
+  function setStatus(message, variant) {
+    status.textContent = message;
+    status.dataset.variant = variant;
+  }
+
+  function stringifyPreview(value) {
+    const raw = JSON.stringify(value, null, 2);
+    return raw.length <= 700 ? raw : raw.slice(0, 700) + "\\n...";
+  }
+
+  function renderEmpty() {
+    clearNode(result);
+    const shell = makeNode("div", "claim-empty");
+    shell.append(
+      makeNode("div", "eyebrow", "Activation"),
+      makeNode("div", "claim-status-title", "Claim the API key from your paid order."),
+      makeNode(
+        "p",
+        "",
+        "Enter the Polar order ID and the buyer email used at checkout. The page will claim the key and immediately test it with a sample compile request."
+      )
+    );
+    result.append(shell);
+  }
+
+  async function copyText(value, button) {
+    try {
+      await navigator.clipboard.writeText(value);
+      const previous = button.textContent;
+      button.textContent = "Copied";
+      setTimeout(() => {
+        button.textContent = previous;
+      }, 1200);
+    } catch {
+      button.textContent = "Copy failed";
+    }
+  }
+
+  function renderClaimed(claim, compileResult) {
+    clearNode(result);
+
+    const statusCard = makeNode("div", "claim-status-card");
+    statusCard.append(
+      makeNode("div", "eyebrow", "Claim complete"),
+      makeNode("div", "claim-status-title", "Your key is live."),
+      makeNode(
+        "p",
+        "claim-status-copy",
+        "The starter key has been claimed from the paid order and verified with a sample compile request."
+      )
+    );
+
+    const keyStrip = makeNode("div", "claim-key-strip");
+    keyStrip.append(
+      makeNode("div", "eyebrow", "API key"),
+      (() => {
+        const code = document.createElement("code");
+        code.textContent = claim.apiKey;
+        return code;
+      })()
+    );
+    const keyActions = makeNode("div", "claim-inline-actions");
+    const copyKeyButton = makeNode("button", "secondary", "Copy API key");
+    copyKeyButton.type = "button";
+    copyKeyButton.addEventListener("click", () => {
+      void copyText(claim.apiKey, copyKeyButton);
+    });
+    keyActions.append(copyKeyButton);
+    keyStrip.append(keyActions);
+
+    const chips = makeNode("div", "claim-micro-row");
+    if (claim.accessMode) {
+      chips.append(makeNode("span", "claim-chip", "Mode: " + claim.accessMode));
+    }
+    if (claim.expiresAt) {
+      chips.append(makeNode("span", "claim-chip", "Expires: " + claim.expiresAt.slice(0, 10)));
+    }
+    if (claim.orderId) {
+      chips.append(makeNode("span", "claim-chip", "Order: " + claim.orderId));
+    }
+
+    const curlPayload = JSON.stringify({
+      schema: {
+        type: "object",
+        properties: {
+          city: { type: "string" },
+          temperatureC: { type: "number" }
+        },
+        required: ["city", "temperatureC"],
+        additionalProperties: false
+      },
+      targets: ["openai", "gemini"]
+    });
+    const curlSnippet = [
+      'curl -X POST ' + compileEndpoint + ' \\\\',
+      "  -H 'content-type: application/json' \\\\",
+      "  -H 'x-api-key: " + claim.apiKey + "' \\\\",
+      '  -d ' + JSON.stringify(curlPayload)
+    ].join("\\n");
+    const tsSnippet = [
+      'import { SchemaGatewayClient } from "@apex-value/schema-gateway";',
+      "",
+      "const client = new SchemaGatewayClient({",
+      "  baseUrl: " + JSON.stringify(baseUrl) + ",",
+      "  apiKey: " + JSON.stringify(claim.apiKey),
+      "});",
+      "",
+      "const result = await client.compileRemote({",
+      "  schema: {",
+      '    type: "object",',
+      '    properties: { city: { type: "string" }, temperatureC: { type: "number" } },',
+      '    required: ["city", "temperatureC"],',
+      "    additionalProperties: false",
+      "  },",
+      '  targets: ["openai", "gemini"]',
+      "});"
+    ].join("\\n");
+
+    const codeGrid = makeNode("div", "claim-code-grid");
+    const curlCard = makeNode("article", "claim-code-card");
+    curlCard.append(makeNode("div", "eyebrow", "cURL"));
+    curlCard.append(makeNode("p", "claim-status-copy", "Use the claimed key immediately from the command line."));
+    const curlPre = document.createElement("pre");
+    const curlCode = document.createElement("code");
+    curlCode.textContent = curlSnippet;
+    curlPre.append(curlCode);
+    curlCard.append(curlPre);
+    const copyCurlButton = makeNode("button", "secondary", "Copy cURL");
+    copyCurlButton.type = "button";
+    copyCurlButton.addEventListener("click", () => {
+      void copyText(curlSnippet, copyCurlButton);
+    });
+    curlCard.append(copyCurlButton);
+
+    const tsCard = makeNode("article", "claim-code-card");
+    tsCard.append(makeNode("div", "eyebrow", "TypeScript"));
+    tsCard.append(makeNode("p", "claim-status-copy", "Wire the same claimed key into the SDK."));
+    const tsPre = document.createElement("pre");
+    const tsCode = document.createElement("code");
+    tsCode.textContent = tsSnippet;
+    tsPre.append(tsCode);
+    tsCard.append(tsPre);
+    const copyTsButton = makeNode("button", "secondary", "Copy TypeScript");
+    copyTsButton.type = "button";
+    copyTsButton.addEventListener("click", () => {
+      void copyText(tsSnippet, copyTsButton);
+    });
+    tsCard.append(copyTsButton);
+
+    codeGrid.append(curlCard, tsCard);
+
+    result.append(statusCard, keyStrip, chips, codeGrid);
+
+    if (compileResult && Array.isArray(compileResult.providers)) {
+      const compileCard = makeNode("div", "claim-status-card");
+      compileCard.append(
+        makeNode("div", "eyebrow", "Verification"),
+        makeNode(
+          "div",
+          "claim-status-title",
+          (compileResult.name ?? "schema_gateway_output") + " compiled successfully"
+        ),
+        makeNode(
+          "p",
+          "claim-status-copy",
+          compileResult.providers
+            .map((provider) => provider.provider + " score " + provider.score)
+            .join(" • ")
+        )
+      );
+      const compilePre = document.createElement("pre");
+      const compileCode = document.createElement("code");
+      const activeProvider = compileResult.providers[0];
+      const activeVariant = activeProvider?.variants?.[0];
+      compileCode.textContent = activeVariant ? stringifyPreview(activeVariant.requestBody) : JSON.stringify(compileResult, null, 2);
+      compilePre.append(compileCode);
+      compileCard.append(compilePre);
+      result.append(compileCard);
+    }
+  }
+
+  async function runSampleCompile(apiKey) {
+    const response = await fetch(compileEndpoint, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey
+      },
+      body: JSON.stringify({
+        schema: sampleSchema,
+        targets: ["openai", "gemini"],
+        name: "claimed_access_check"
+      })
+    });
+
+    const payload = await response.json();
+    if (!response.ok) {
+      throw new Error(payload.error ?? "The claimed key could not complete the sample compile.");
+    }
+
+    return payload;
+  }
+
+  async function runClaim() {
+    const orderId = orderIdField.value.trim();
+    const email = emailField.value.trim();
+
+    if (!orderId || !email) {
+      setStatus("Order ID and email are both required.", "error");
+      renderEmpty();
+      return;
+    }
+
+    setStatus("Claiming API key from the paid order...", "loading");
+    try {
+      const claimResponse = await fetch(claimEndpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({ orderId, email })
+      });
+      const claimPayload = await claimResponse.json();
+
+      if (!claimResponse.ok) {
+        throw new Error(claimPayload.error ?? "The order could not be claimed.");
+      }
+
+      setStatus("Key claimed. Verifying it with a sample compile...", "loading");
+      const compilePayload = await runSampleCompile(claimPayload.apiKey);
+      setStatus("Claim complete. The key is live and verified.", "success");
+      renderClaimed(claimPayload, compilePayload);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error), "error");
+      clearNode(result);
+      const card = makeNode("div", "claim-empty");
+      card.append(
+        makeNode("div", "eyebrow", "Claim failed"),
+        makeNode("div", "claim-status-title", error instanceof Error ? error.message : String(error)),
+        makeNode(
+          "p",
+          "",
+          "Check the paid order ID and buyer email, or return to pricing if you still need to buy access."
+        )
+      );
+      result.append(card);
+    }
+  }
+
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    void runClaim();
+  });
+
+  renderEmpty();
+
+  const params = new URLSearchParams(window.location.search);
+  const orderIdFromQuery = params.get("orderId") ?? params.get("order_id");
+  const emailFromQuery = params.get("email");
+
+  if (orderIdFromQuery) {
+    orderIdField.value = orderIdFromQuery;
+  }
+  if (emailFromQuery) {
+    emailField.value = emailFromQuery;
+  }
+
+  if (orderIdField.value.trim() && emailField.value.trim()) {
+    void runClaim();
+  }
 })();
 </script>`;
 }
@@ -1829,6 +2138,130 @@ function renderMarketingPage(context: {
         font-size: 0.94rem;
         line-height: 1.5;
       }
+      .claim-shell {
+        display: grid;
+        grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.22fr);
+        gap: 16px;
+      }
+      .claim-form-shell {
+        display: grid;
+        gap: 18px;
+        padding: 26px;
+        border-radius: 28px;
+        background:
+          radial-gradient(circle at top left, rgba(255, 255, 255, 0.08), transparent 24%),
+          linear-gradient(180deg, #12191d 0%, #172026 100%);
+        color: #eef4f2;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: var(--shadow);
+      }
+      .claim-form-shell .eyebrow,
+      .claim-form-shell .field-label,
+      .claim-form-shell .meta,
+      .claim-form-shell p {
+        color: rgba(238, 244, 242, 0.78);
+      }
+      .claim-form-shell input {
+        border-color: rgba(255, 255, 255, 0.08);
+        background: rgba(255, 255, 255, 0.04);
+        color: #f5faf8;
+      }
+      .claim-form-shell .secondary {
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--ink);
+      }
+      .claim-result-shell {
+        display: grid;
+        gap: 16px;
+        padding: 26px;
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.86);
+        border: 1px solid var(--border);
+        box-shadow: var(--shadow);
+      }
+      .claim-status-card {
+        display: grid;
+        gap: 10px;
+        padding: 18px;
+        border-radius: 20px;
+        background: rgba(244, 239, 229, 0.64);
+        border: 1px solid var(--border);
+      }
+      .claim-status-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+      .claim-status-copy {
+        margin: 0;
+        font-size: 0.98rem;
+        color: var(--muted);
+      }
+      .claim-code-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+      .claim-code-card {
+        display: grid;
+        gap: 12px;
+        padding: 18px;
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid var(--border);
+      }
+      .claim-code-card pre {
+        max-height: 260px;
+        overflow: auto;
+      }
+      .claim-hidden {
+        display: none;
+      }
+      .claim-key-strip {
+        display: grid;
+        gap: 10px;
+        padding: 16px;
+        border-radius: 18px;
+        background: rgba(22, 104, 106, 0.08);
+        border: 1px solid rgba(22, 104, 106, 0.14);
+      }
+      .claim-key-strip code {
+        display: block;
+        word-break: break-all;
+      }
+      .claim-micro-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+      .claim-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 32px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.78);
+        border: 1px solid var(--border);
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+      .claim-empty {
+        display: grid;
+        gap: 10px;
+        padding: 22px;
+        border-radius: 22px;
+        background: rgba(244, 239, 229, 0.54);
+        border: 1px dashed var(--border);
+      }
+      .claim-empty p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .claim-inline-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
       [data-variant="error"] {
         color: #9f2b1c;
       }
@@ -1847,6 +2280,8 @@ function renderMarketingPage(context: {
         .compiler-lab-grid,
         .split-panel,
         .compact-grid,
+        .claim-shell,
+        .claim-code-grid,
         .pricing-shell,
         .pricing-row,
         .compiler-note-grid {
@@ -1957,6 +2392,7 @@ function renderLandingPage(context: {
             <a class="primary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Run free live demo</a>
             ${checkoutMarkup}
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/pricing">See pricing</a>
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/claim">Claim key</a>
           </div>
           <div class="pill-row">
             <span class="pill">OpenAI strict schema fixes</span>
@@ -2062,6 +2498,7 @@ function renderLandingPage(context: {
         <div class="actions">
           <a class="primary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Open live demo</a>
           <a class="secondary" href="${escapeHtml(context.baseUrl)}/pricing">Open pricing</a>
+          <a class="secondary" href="${escapeHtml(context.baseUrl)}/claim">Claim access</a>
           <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install from GitHub</a>
         </div>
       </section>
@@ -2483,6 +2920,7 @@ function renderPricingPage(context: {
           <div class="actions">
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Run free demo</a>
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install guide</a>
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/claim">Claim key</a>
           </div>
         </article>
         <aside class="glass-panel">
@@ -2500,6 +2938,7 @@ function renderPricingPage(context: {
           </ul>
           <div class="actions">
             ${checkoutMarkup}
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/claim">Already bought? Claim key</a>
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/openapi.json">OpenAPI spec</a>
           </div>
         </aside>
@@ -2519,6 +2958,108 @@ function renderPricingPage(context: {
 schema-gateway lint --schema ./schema.json --target openai,gemini`)}
         </article>
       </section>`
+  });
+}
+
+function renderClaimPage(context: {
+  baseUrl: string;
+  checkoutUrl: string | undefined;
+}): string {
+  const checkoutMarkup = context.checkoutUrl
+    ? `<a class="secondary" href="${escapeHtml(context.checkoutUrl)}">Buy starter access</a>`
+    : `<span class="ghost">Checkout not configured</span>`;
+
+  return renderMarketingPage({
+    baseUrl: context.baseUrl,
+    path: "/claim",
+    title: "Claim Schema Gateway Access | Turn a paid order into a live API key",
+    description:
+      "Claim a Schema Gateway API key from a paid Polar order and verify it immediately with a live sample compile request.",
+    body: `<section class="panel spotlight">
+        <article class="spotlight-copy">
+          <div class="eyebrow compiler-kicker">Claim access</div>
+          <h1>Turn a paid order into a live API key.</h1>
+          <p class="spotlight-lede">
+            This page is the activation step after checkout. Enter the paid Polar order ID and the
+            buyer email, claim the key, and verify it instantly with a real compile request.
+          </p>
+          <div class="compiler-stat-row">
+            <div class="compiler-stat">
+              <strong>Self-serve</strong>
+              <span>no manual support or back-and-forth</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>Immediate verification</strong>
+              <span>the page tests the claimed key for you</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>Copy-ready snippets</strong>
+              <span>cURL and TypeScript after activation</span>
+            </div>
+          </div>
+          <div class="actions">
+            <a class="primary" href="${escapeHtml(context.baseUrl)}/pricing">Pricing</a>
+            ${checkoutMarkup}
+          </div>
+        </article>
+        <aside class="spotlight-panel">
+          <div class="eyebrow">What you need</div>
+          <div class="spotlight-steps">
+            <div class="spotlight-step">
+              <span class="spotlight-step-index">1</span>
+              <div>
+                <strong>Paid Polar order ID</strong>
+                <span>Use the order that was created after checkout.</span>
+              </div>
+            </div>
+            <div class="spotlight-step">
+              <span class="spotlight-step-index">2</span>
+              <div>
+                <strong>Buyer email</strong>
+                <span>Enter the same email used when the payment was completed.</span>
+              </div>
+            </div>
+            <div class="spotlight-step">
+              <span class="spotlight-step-index">3</span>
+              <div>
+                <strong>Claim and test</strong>
+                <span>The page issues the key and runs a sample compile so you know it works.</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </section>
+      <section class="claim-shell section">
+        <form class="claim-form-shell" id="claim-access-form">
+          <div class="stack">
+            <div class="eyebrow compiler-kicker">Activation</div>
+            <h2>Claim your key</h2>
+            <p>Use the exact paid order ID and buyer email. If you have not purchased yet, go through the starter checkout first.</p>
+          </div>
+          <label class="field" for="claim-order-id">
+            <span class="field-label">Polar order ID</span>
+            <input id="claim-order-id" name="orderId" placeholder="order_123 or polar_order..." spellcheck="false">
+          </label>
+          <label class="field" for="claim-email">
+            <span class="field-label">Buyer email</span>
+            <input id="claim-email" name="email" placeholder="you@example.com" spellcheck="false">
+          </label>
+          <div class="claim-inline-actions">
+            <button class="primary" type="submit">Claim API key</button>
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Run free demo instead</a>
+          </div>
+          <p class="meta" data-variant="idle" id="claim-status">Waiting for a paid order.</p>
+        </form>
+        <div class="claim-result-shell">
+          <div class="stack">
+            <div class="eyebrow compiler-kicker">Live result</div>
+            <h2>Claimed key and first request</h2>
+            <p class="compiler-output-caption">After claim, this panel shows the issued key, copy-ready snippets, and a verified sample compile response.</p>
+          </div>
+          <div id="claim-result"></div>
+        </div>
+      </section>
+      ${renderClaimPageScript(context.baseUrl)}`
   });
 }
 
@@ -3035,6 +3576,16 @@ app.get("/pricing", (context) => {
   );
 });
 
+app.get("/claim", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(
+    renderClaimPage({
+      baseUrl,
+      checkoutUrl: context.env.CHECKOUT_URL
+    })
+  );
+});
+
 app.get("/robots.txt", (context) => {
   const baseUrl = new URL(context.req.url).origin;
   return context.text(`User-agent: *
@@ -3064,6 +3615,7 @@ Primary pages:
 - GitHub CI: ${baseUrl}/ci
 - Install: ${baseUrl}/install
 - Pricing: ${baseUrl}/pricing
+- Claim: ${baseUrl}/claim
 - OpenAPI: ${baseUrl}/openapi.json
 
 Provider comparison pages:
@@ -3094,6 +3646,7 @@ app.get("/sitemap.xml", (context) => {
     "/ci",
     "/install",
     "/pricing",
+    "/claim",
     ...COMPARE_PAGES.map((page) => `/compare/${page.slug}`)
   ];
   const xml = `<?xml version="1.0" encoding="UTF-8"?>

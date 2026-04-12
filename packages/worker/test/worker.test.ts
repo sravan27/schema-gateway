@@ -178,6 +178,7 @@ describe("worker", () => {
     expect(html).toContain("/ci");
     expect(html).toContain("/install");
     expect(html).toContain("/pricing");
+    expect(html).toContain("/claim");
   });
 
   it("serves install, provider comparison, and crawl files", async () => {
@@ -199,6 +200,13 @@ describe("worker", () => {
     expect(compilerHtml).toContain("Show raw demo bundle");
     expect(compilerHtml).toContain("Run free demo");
     expect(compilerHtml).toContain("/v1/demo/compile");
+
+    const claimResponse = await app.request("http://example.test/claim", {}, env);
+    expect(claimResponse.status).toBe(200);
+    const claimHtml = await claimResponse.text();
+    expect(claimHtml).toContain("Turn a paid order into a live API key.");
+    expect(claimHtml).toContain("Claim API key");
+    expect(claimHtml).toContain("/v1/access/polar/claim");
 
     const ciResponse = await app.request("http://example.test/ci", {}, env);
     expect(ciResponse.status).toBe(200);
@@ -224,6 +232,7 @@ describe("worker", () => {
     expect(sitemap).toContain("/ci");
     expect(sitemap).toContain("/install");
     expect(sitemap).toContain("/pricing");
+    expect(sitemap).toContain("/claim");
 
     const llmsResponse = await app.request("http://example.test/llms.txt", {}, env);
     expect(llmsResponse.status).toBe(200);
@@ -232,6 +241,7 @@ describe("worker", () => {
     expect(llms).toContain("Compiler:");
     expect(llms).toContain("GitHub CI:");
     expect(llms).toContain("Install:");
+    expect(llms).toContain("Claim:");
     expect(llms).toContain("POST /v1/demo/compile");
     expect(llms).toContain("POST /v1/lint");
 
