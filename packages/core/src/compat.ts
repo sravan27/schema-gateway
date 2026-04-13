@@ -2,14 +2,18 @@ import { sha256Hex } from "./crypto.js";
 import type {
   CompileSchemaRequest,
   CompiledSchemaProvider,
+  DiffSchemaRequest,
   LintSchemaRequest,
   LintSeverity,
+  SchemaChangeRisk,
   SchemaCompilationBundle,
   SchemaCompileVariant,
   SchemaLintIssue,
   SchemaPortabilityReport,
   SchemaPortabilityTarget,
-  SchemaProviderReport
+  SchemaProviderReport,
+  SchemaRegressionProviderReport,
+  SchemaRegressionReport
 } from "./types.js";
 import { isRecord } from "./utils.js";
 
@@ -217,6 +221,306 @@ function forEachChildSchema(
       }
     }
   }
+}
+
+function severityRank(severity: LintSeverity): number {
+  switch (severity) {
+    case "error":
+      return 3;
+    case "warning":
+      return 2;
+    case "info":
+      return 1;
+  }
+}
+
+function lintProvider(
+  provider: SchemaPortabilityTarget,
+  schema: Record<string, unknown>
+): SchemaProviderReport {
+  switch (provider) {
+    case "openai":
+      return lintOpenAi(schema);
+    case "gemini":
+      return lintGemini(schema);
+    case "anthropic":
+      return lintAnthropic(schema);
+    case "ollama":
+      return lintOllama(schema);
+  }
+}
+
+function issueIdentity(issue: SchemaLintIssue): string {
+  return `${issue.provider}:${issue.code}:${issue.path ?? "$"}`;
+}
+
+function dedupeIssueList(issues: SchemaLintIssue[]): SchemaLintIssue[] {
+  const seen = new Set<string>();
+  const deduped: SchemaLintIssue[] = [];
+
+  for (const issue of issues) {
+    const key = issueIdentity(issue);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(issue);
+  }
+
+  return deduped;
+}
+
+function dedupeChangeRisks(risks: SchemaChangeRisk[]): SchemaChangeRisk[] {
+  const seen = new Set<string>();
+  const deduped: SchemaChangeRisk[] = [];
+
+  for (const risk of risks) {
+    const key = `${risk.code}:${risk.path ?? "$"}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    deduped.push(risk);
+  }
+
+  return deduped;
+}
+
+function stableStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === "string")
+    .slice()
+    .sort();
+}
+
+function typeSignature(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const entries = value.filter((entry): entry is string => typeof entry === "string").slice().sort();
+    return entries.length > 0 ? entries.join("|") : null;
+  }
+
+  return null;
+}
+
+function enumSignature(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.map((entry) => JSON.stringify(entry)).sort();
+}
+
+function addChangeRisk(
+  risks: SchemaChangeRisk[],
+  severity: LintSeverity,
+  code: string,
+  message: string,
+  path = "$"
+): void {
+  risks.push({
+    code,
+    severity,
+    message,
+    path
+  });
+}
+
+function compareSchemaShapes(
+  baseline: Record<string, unknown>,
+  candidate: Record<string, unknown>,
+  risks: SchemaChangeRisk[],
+  path = "$"
+): void {
+  const baselineType = typeSignature(baseline.type);
+  const candidateType = typeSignature(candidate.type);
+
+  if (baselineType && candidateType && baselineType !== candidateType) {
+    addChangeRisk(
+      risks,
+      "warning",
+      "schema_type_changed",
+      `Type changed from \`${baselineType}\` to \`${candidateType}\`. Existing prompts or consumers may no longer match the same shape.`,
+      path
+    );
+  }
+
+  const baselineEnum = enumSignature(baseline.enum);
+  const candidateEnum = enumSignature(candidate.enum);
+  if (baselineEnum.length > 0 || candidateEnum.length > 0) {
+    const removedValues = baselineEnum.filter((entry) => !candidateEnum.includes(entry));
+    const addedValues = candidateEnum.filter((entry) => !baselineEnum.includes(entry));
+
+    if (removedValues.length > 0) {
+      addChangeRisk(
+        risks,
+        "error",
+        "schema_enum_values_removed",
+        `Enum values were removed: ${removedValues.join(", ")}.`,
+        `${path}.enum`
+      );
+    }
+
+    if (addedValues.length > 0) {
+      addChangeRisk(
+        risks,
+        "info",
+        "schema_enum_values_added",
+        `Enum values were added: ${addedValues.join(", ")}.`,
+        `${path}.enum`
+      );
+    }
+  }
+
+  const baselineProperties = isRecord(baseline.properties) ? baseline.properties : undefined;
+  const candidateProperties = isRecord(candidate.properties) ? candidate.properties : undefined;
+  const baselineRequired = stableStringArray(baseline.required);
+  const candidateRequired = stableStringArray(candidate.required);
+
+  for (const propertyName of candidateRequired) {
+    if (!baselineRequired.includes(propertyName)) {
+      addChangeRisk(
+        risks,
+        "error",
+        "schema_required_field_added",
+        `Property \`${propertyName}\` became required in the candidate schema.`,
+        path
+      );
+    }
+  }
+
+  if (baselineProperties && candidateProperties) {
+    for (const propertyName of Object.keys(baselineProperties)) {
+      if (!(propertyName in candidateProperties)) {
+        addChangeRisk(
+          risks,
+          "error",
+          "schema_property_removed",
+          `Property \`${propertyName}\` was removed from the candidate schema.`,
+          `${path}.properties.${propertyName}`
+        );
+      }
+    }
+
+    for (const propertyName of Object.keys(candidateProperties)) {
+      if (!(propertyName in baselineProperties)) {
+        addChangeRisk(
+          risks,
+          candidateRequired.includes(propertyName) ? "warning" : "info",
+          "schema_property_added",
+          `Property \`${propertyName}\` was added to the candidate schema.`,
+          `${path}.properties.${propertyName}`
+        );
+      }
+    }
+
+    for (const [propertyName, baselineProperty] of Object.entries(baselineProperties)) {
+      const candidateProperty = candidateProperties[propertyName];
+      if (isRecord(baselineProperty) && isRecord(candidateProperty)) {
+        compareSchemaShapes(
+          baselineProperty,
+          candidateProperty,
+          risks,
+          `${path}.properties.${propertyName}`
+        );
+      }
+    }
+  }
+
+  if (isRecord(baseline.items) && isRecord(candidate.items)) {
+    compareSchemaShapes(baseline.items, candidate.items, risks, `${path}.items`);
+  }
+
+  for (const keyword of ["anyOf", "oneOf", "allOf"] as const) {
+    const baselineEntries = Array.isArray(baseline[keyword]) ? baseline[keyword] : [];
+    const candidateEntries = Array.isArray(candidate[keyword]) ? candidate[keyword] : [];
+    const sharedLength = Math.min(baselineEntries.length, candidateEntries.length);
+
+    if (baselineEntries.length !== candidateEntries.length) {
+      addChangeRisk(
+        risks,
+        "warning",
+        "schema_union_shape_changed",
+        `Branch count for \`${keyword}\` changed from ${baselineEntries.length} to ${candidateEntries.length}.`,
+        `${path}.${keyword}`
+      );
+    }
+
+    for (let index = 0; index < sharedLength; index += 1) {
+      const baselineEntry = baselineEntries[index];
+      const candidateEntry = candidateEntries[index];
+      if (isRecord(baselineEntry) && isRecord(candidateEntry)) {
+        compareSchemaShapes(
+          baselineEntry,
+          candidateEntry,
+          risks,
+          `${path}.${keyword}[${index}]`
+        );
+      }
+    }
+  }
+}
+
+function compareProviderReports(
+  baselineReport: SchemaProviderReport,
+  candidateReport: SchemaProviderReport
+): SchemaRegressionProviderReport {
+  const baselineIndex = new Map(
+    baselineReport.issues.map((issue) => [issueIdentity(issue), issue] as const)
+  );
+  const candidateIndex = new Map(
+    candidateReport.issues.map((issue) => [issueIdentity(issue), issue] as const)
+  );
+
+  const introducedIssues: SchemaLintIssue[] = [];
+  const resolvedIssues: SchemaLintIssue[] = [];
+  const persistedIssues: SchemaLintIssue[] = [];
+
+  for (const [key, candidateIssue] of candidateIndex) {
+    const baselineIssue = baselineIndex.get(key);
+    if (!baselineIssue) {
+      introducedIssues.push(candidateIssue);
+      continue;
+    }
+
+    if (severityRank(candidateIssue.severity) > severityRank(baselineIssue.severity)) {
+      introducedIssues.push(candidateIssue);
+      continue;
+    }
+
+    persistedIssues.push(candidateIssue);
+  }
+
+  for (const [key, baselineIssue] of baselineIndex) {
+    const candidateIssue = candidateIndex.get(key);
+    if (!candidateIssue) {
+      resolvedIssues.push(baselineIssue);
+      continue;
+    }
+
+    if (severityRank(candidateIssue.severity) < severityRank(baselineIssue.severity)) {
+      resolvedIssues.push(baselineIssue);
+    }
+  }
+
+  return {
+    provider: candidateReport.provider,
+    baselineCompatible: baselineReport.compatible,
+    candidateCompatible: candidateReport.compatible,
+    baselineScore: baselineReport.score,
+    candidateScore: candidateReport.score,
+    scoreDelta: candidateReport.score - baselineReport.score,
+    introducedIssues: dedupeIssueList(introducedIssues),
+    resolvedIssues: dedupeIssueList(resolvedIssues),
+    persistedIssues: dedupeIssueList(persistedIssues)
+  };
 }
 
 function lintOpenAi(schema: Record<string, unknown>): SchemaProviderReport {
@@ -489,22 +793,88 @@ export async function lintStructuredOutputSchema(
     : (["openai", "gemini", "anthropic", "ollama"] as SchemaPortabilityTarget[]);
 
   const uniqueProviders = [...new Set(providers)];
-  const reports = uniqueProviders.map((provider) => {
-    switch (provider) {
-      case "openai":
-        return lintOpenAi(request.schema);
-      case "gemini":
-        return lintGemini(request.schema);
-      case "anthropic":
-        return lintAnthropic(request.schema);
-      case "ollama":
-        return lintOllama(request.schema);
-    }
-  });
+  const reports = uniqueProviders.map((provider) => lintProvider(provider, request.schema));
 
   return {
     schemaHash: await sha256Hex(request.schema),
     providers: reports
+  };
+}
+
+export async function diffStructuredOutputSchemas(
+  request: DiffSchemaRequest
+): Promise<SchemaRegressionReport> {
+  const providers = request.targets?.length
+    ? request.targets
+    : (["openai", "gemini", "anthropic", "ollama"] as SchemaPortabilityTarget[]);
+  const uniqueProviders = [...new Set(providers)];
+
+  const baselineReports = uniqueProviders.map((provider) =>
+    lintProvider(provider, request.baselineSchema)
+  );
+  const candidateReports = uniqueProviders.map((provider) =>
+    lintProvider(provider, request.candidateSchema)
+  );
+
+  const providersReport = uniqueProviders.map((provider, index) =>
+    compareProviderReports(
+      baselineReports[index] as SchemaProviderReport,
+      candidateReports[index] as SchemaProviderReport
+    )
+  );
+
+  const changeRisks: SchemaChangeRisk[] = [];
+  compareSchemaShapes(request.baselineSchema, request.candidateSchema, changeRisks);
+
+  const introducedErrorCount = providersReport.reduce(
+    (sum, provider) =>
+      sum + provider.introducedIssues.filter((issue) => issue.severity === "error").length,
+    0
+  ) + changeRisks.filter((risk) => risk.severity === "error").length;
+
+  const introducedWarningCount = providersReport.reduce(
+    (sum, provider) =>
+      sum + provider.introducedIssues.filter((issue) => issue.severity === "warning").length,
+    0
+  ) + changeRisks.filter((risk) => risk.severity === "warning").length;
+
+  const resolvedIssueCount = providersReport.reduce(
+    (sum, provider) => sum + provider.resolvedIssues.length,
+    0
+  );
+
+  const affectedProviders = providersReport
+    .filter(
+      (provider) =>
+        provider.introducedIssues.length > 0 ||
+        provider.scoreDelta < 0 ||
+        provider.baselineCompatible !== provider.candidateCompatible
+    )
+    .map((provider) => provider.provider);
+
+  const hasGlobalRisk = changeRisks.some(
+    (risk) => risk.severity === "error" || risk.severity === "warning"
+  );
+  const effectiveAffectedProviders = hasGlobalRisk
+    ? [...new Set([...affectedProviders, ...uniqueProviders])]
+    : affectedProviders;
+
+  return {
+    baselineHash: await sha256Hex(request.baselineSchema),
+    candidateHash: await sha256Hex(request.candidateSchema),
+    providers: providersReport,
+    changeRisks: dedupeChangeRisks(changeRisks),
+    summary: {
+      breakingChangeLikely:
+        introducedErrorCount > 0 ||
+        providersReport.some(
+          (provider) => provider.baselineCompatible && !provider.candidateCompatible
+        ),
+      introducedErrorCount,
+      introducedWarningCount,
+      resolvedIssueCount,
+      affectedProviders: effectiveAffectedProviders
+    }
   };
 }
 

@@ -6,7 +6,7 @@
 [![Buy Access](https://img.shields.io/badge/buy-starter%20access-111827)](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK)
 [![Claim Access](https://img.shields.io/badge/claim-paid%20key-f3f4f6?logo=cloudflare&logoColor=f97316&labelColor=111827)](https://schema-gateway.sridharsravan.workers.dev/claim)
 
-Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini, Anthropic, and Ollama, then catch portability drift before it breaks CI or production.
+Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini, Anthropic, and Ollama, then catch portability drift and schema regressions before they break CI or production.
 
 [Install from GitHub release](https://schema-gateway.sridharsravan.workers.dev/install) · [Run the live compiler demo](https://schema-gateway.sridharsravan.workers.dev/compiler#demo) · [Buy starter access](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK) · [Claim a paid key](https://schema-gateway.sridharsravan.workers.dev/claim)
 
@@ -16,6 +16,7 @@ Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini,
 
 - a free SDK for local schema validation and tool-call normalization
 - a schema portability linter that rewrites one schema into provider-safe variants
+- a schema regression engine that compares a baseline and candidate schema before rollout
 - a Cloudflare Worker for paid, signed normalization responses
 - a Solidity paywall contract that accepts native or ERC-20 payments and emits receipts the Worker can redeem into API keys
 - a Polar billing path for legal fiat checkout and API-key provisioning
@@ -23,6 +24,7 @@ Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini,
 ## Why teams care
 
 - one schema in, four provider-ready request shapes out
+- a baseline-vs-candidate regression report for provider-specific breakage
 - free-first adoption through the local CLI, SDK, GitHub Action, and hosted demo
 - paid only when teams need one shared signed API surface for CI or multiple engineers
 - self-serve activation through a paid order claim flow instead of manual provisioning
@@ -32,6 +34,7 @@ Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini,
 | Goal | Path |
 | --- | --- |
 | Prove the value in under a minute | [Run the free demo compiler](https://schema-gateway.sridharsravan.workers.dev/compiler#demo) |
+| Check whether a schema change is risky | `schema-gateway diff --baseline ./old.json --candidate ./new.json` |
 | Install without waiting on npm | [Use the release installer](https://schema-gateway.sridharsravan.workers.dev/install) |
 | Add a portability check to CI | [Use the reusable GitHub Action](https://schema-gateway.sridharsravan.workers.dev/ci) |
 | Buy the hosted API | [Starter access checkout](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK) |
@@ -43,6 +46,7 @@ Live surfaces:
 - Comparisons: [https://schema-gateway.sridharsravan.workers.dev/compare](https://schema-gateway.sridharsravan.workers.dev/compare)
 - Compiler: [https://schema-gateway.sridharsravan.workers.dev/compiler](https://schema-gateway.sridharsravan.workers.dev/compiler)
 - Free demo: [https://schema-gateway.sridharsravan.workers.dev/compiler#demo](https://schema-gateway.sridharsravan.workers.dev/compiler#demo)
+- Regression demo API: [https://schema-gateway.sridharsravan.workers.dev/v1/demo/diff](https://schema-gateway.sridharsravan.workers.dev/v1/demo/diff)
 - GitHub CI: [https://schema-gateway.sridharsravan.workers.dev/ci](https://schema-gateway.sridharsravan.workers.dev/ci)
 - Install: [https://schema-gateway.sridharsravan.workers.dev/install](https://schema-gateway.sridharsravan.workers.dev/install)
 - Pricing: [https://schema-gateway.sridharsravan.workers.dev/pricing](https://schema-gateway.sridharsravan.workers.dev/pricing)
@@ -100,6 +104,7 @@ And an install page for release-tarball distribution:
 - Schema compiler: `/compiler`
 - Live compiler demo: `/compiler#demo`
 - GitHub Action guide: `/ci`
+- Schema regression API: `/v1/diff`
 
 ## Billing Paths
 
@@ -138,9 +143,23 @@ schema-gateway validate --schema ./schema.json --payload ./payload.json
 schema-gateway commitment --label router-service
 schema-gateway lint --schema ./schema.json --target openai,gemini
 schema-gateway compile --schema ./schema.json --target openai,gemini,anthropic,ollama --name extraction_result
+schema-gateway diff --baseline ./schema-old.json --candidate ./schema-new.json --target openai,gemini,anthropic,ollama
 ```
 
 The compiler emits provider-ready request fragments for OpenAI Responses, OpenAI Chat Completions, Gemini, Anthropic tools, and Ollama.
+
+To compare two schema revisions before shipping a change:
+
+```ts
+import { SchemaGatewayClient } from "@apex-value/schema-gateway";
+
+const client = new SchemaGatewayClient();
+const diff = await client.diffLocal({
+  baselineSchema,
+  candidateSchema,
+  targets: ["openai", "gemini", "anthropic", "ollama"]
+});
+```
 
 You can also try the hosted compiler without buying anything first:
 
@@ -150,7 +169,17 @@ curl -X POST https://schema-gateway.sridharsravan.workers.dev/v1/demo/compile \
   -d '{"schema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["city","temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'
 ```
 
-The public demo is intentionally constrained to small compile-only requests. The paid API unlocks the signed shared endpoints for `/v1/compile`, `/v1/lint`, and `/v1/normalize`.
+The public demo is intentionally constrained to small compile-only requests. The paid API unlocks the signed shared endpoints for `/v1/compile`, `/v1/diff`, `/v1/lint`, and `/v1/normalize`.
+
+You can also try the public regression demo without buying anything first:
+
+```bash
+curl -X POST https://schema-gateway.sridharsravan.workers.dev/v1/demo/diff \
+  -H 'content-type: application/json' \
+  -d '{"baselineSchema":{"type":"object","properties":{"city":{"type":"string"}},"required":[],"additionalProperties":false},"candidateSchema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'
+```
+
+The regression report tells you which providers got riskier, which issues were introduced or resolved, and whether the change is likely breaking.
 
 When you want the same compiler through the hosted API with signed responses:
 
@@ -161,11 +190,21 @@ curl -X POST https://schema-gateway.sridharsravan.workers.dev/v1/compile \
   -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}}},"targets":["openai","gemini"]}'
 ```
 
+To request a signed regression report from the hosted API:
+
+```bash
+curl -X POST https://schema-gateway.sridharsravan.workers.dev/v1/diff \
+  -H 'content-type: application/json' \
+  -H 'x-api-key: sk_live...' \
+  -d '{"baselineSchema":{"type":"object","properties":{"city":{"type":"string"}},"required":[],"additionalProperties":false},"candidateSchema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'
+```
+
 Provider-specific examples live in:
 
 - `/Users/sravansridhar/Documents/auto-money/examples/openai-responses.ts`
 - `/Users/sravansridhar/Documents/auto-money/examples/langchain-ollama.ts`
 - `/Users/sravansridhar/Documents/auto-money/examples/schema-portability.ts`
+- `/Users/sravansridhar/Documents/auto-money/examples/schema-regression.ts`
 
 To audit one schema across providers before you ship it:
 
@@ -194,7 +233,7 @@ const bundle = await client.compileLocal({
 
 ## GitHub Action
 
-Schema Gateway also ships a reusable GitHub Action that lints a schema in CI and writes a job summary with top issues plus the first generated provider snippet:
+Schema Gateway also ships a reusable GitHub Action that lints a schema in CI, can compare a baseline schema against the candidate version, and writes a job summary with top issues plus the first generated provider snippet:
 
 ```yaml
 name: Schema portability
@@ -211,9 +250,12 @@ jobs:
       - uses: actions/checkout@v5
       - uses: sravan27/schema-gateway/.github/actions/portability-check@v0.1.3
         with:
+          baseline-schema: schema.prev.json
           schema: schema.json
           targets: openai,gemini,anthropic,ollama
 ```
+
+When `baseline-schema` is set, the action also generates a regression section in the job summary and can fail the workflow on likely breaking schema changes.
 
 When you need signed responses and prepaid credits, generate the same label commitment locally, buy credits on-chain with that commitment, then redeem the resulting transaction for a key:
 
@@ -248,6 +290,15 @@ curl -X POST https://your-worker.example/v1/lint \
   -H 'content-type: application/json' \
   -H 'x-api-key: sk_live...' \
   -d '{"schema":{"type":"object","properties":{"city":{"type":"string"}},"required":[]}}'
+```
+
+Or a signed schema regression report between a baseline and candidate schema:
+
+```bash
+curl -X POST https://your-worker.example/v1/diff \
+  -H 'content-type: application/json' \
+  -H 'x-api-key: sk_live...' \
+  -d '{"baselineSchema":{"type":"object","properties":{"city":{"type":"string"}},"required":[],"additionalProperties":false},"candidateSchema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'
 ```
 
 Run the Worker locally:

@@ -3,6 +3,7 @@ import {
   compileStructuredOutputSchema,
   constantTimeEqual,
   createSignedEnvelope,
+  diffStructuredOutputSchemas,
   lintStructuredOutputSchema,
   normalizeStructuredOutput,
   purchaseEventAbiItem,
@@ -64,6 +65,12 @@ const CompileBodySchema = z.object({
   name: z.string().min(1).max(64).optional(),
   description: z.string().min(1).max(280).optional(),
   prompt: z.string().min(1).max(4000).optional()
+});
+
+const DiffBodySchema = z.object({
+  baselineSchema: z.record(z.string(), z.unknown()),
+  candidateSchema: z.record(z.string(), z.unknown()),
+  targets: z.array(z.enum(["openai", "gemini", "anthropic", "ollama"])).optional()
 });
 
 const RedeemBodySchema = z.object({
@@ -257,6 +264,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: sravan27/schema-gateway/.github/actions/portability-check@${PUBLIC_ACTION_REF}
         with:
+          baseline-schema: schema.prev.json
           schema: schema.json
           targets: openai,gemini,anthropic,ollama`;
 const PUBLIC_COMPILE_SNIPPET = `schema-gateway compile \\
@@ -2357,6 +2365,9 @@ function renderLandingPage(context: {
   const liveDemoSnippet = `curl -X POST ${context.baseUrl}/v1/demo/compile \\
   -H 'content-type: application/json' \\
   -d '{"schema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["city","temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'`;
+  const diffDemoSnippet = `curl -X POST ${context.baseUrl}/v1/demo/diff \\
+  -H 'content-type: application/json' \\
+  -d '{"baselineSchema":{"type":"object","properties":{"city":{"type":"string"}},"required":[],"additionalProperties":false},"candidateSchema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'`;
 
   return renderMarketingPage({
     baseUrl: context.baseUrl,
@@ -2371,8 +2382,9 @@ function renderLandingPage(context: {
           <h1>Stop rewriting one schema for every model vendor.</h1>
           <p class="spotlight-lede">
             Schema Gateway is the reliability layer between your JSON Schema and the model APIs that
-            keep interpreting it differently. Lint locally for free, compile provider-ready request
-            payloads, and move to the signed shared API when production workflows need one stable surface.
+            keep interpreting it differently. Lint and regression-check locally for free, compile
+            provider-ready request payloads, and move to the signed shared API when production workflows
+            need one stable surface.
           </p>
           <div class="compiler-stat-row">
             <div class="compiler-stat">
@@ -2415,8 +2427,8 @@ function renderLandingPage(context: {
             <div class="spotlight-step">
               <span class="spotlight-step-index">2</span>
               <div>
-                <strong>Use the live demo before buying</strong>
-                <span>The public compiler demo proves the hosted path without asking for signup, tokens, or registry setup.</span>
+                <strong>Use the live demos before buying</strong>
+                <span>The public compiler and regression demos prove the hosted path without asking for signup, tokens, or registry setup.</span>
               </div>
             </div>
             <div class="spotlight-step">
@@ -2428,7 +2440,7 @@ function renderLandingPage(context: {
             </div>
           </div>
           <div class="spotlight-window">
-            ${renderCodeBlock(liveDemoSnippet)}
+            ${renderCodeBlock(`${liveDemoSnippet}\n\n${diffDemoSnippet}`)}
           </div>
           <p class="meta">Base URL: <code>${escapeHtml(context.baseUrl)}</code></p>
         </aside>
@@ -2440,7 +2452,7 @@ function renderLandingPage(context: {
         </article>
         <article class="compact-card">
           <div class="eyebrow">Free evaluation</div>
-          <p>Try the live compiler demo or install from GitHub before you buy anything.</p>
+          <p>Try the live compiler and schema regression demos or install from GitHub before you buy anything.</p>
         </article>
         <article class="compact-card">
           <div class="eyebrow">Paid when shared API matters</div>
@@ -2453,8 +2465,8 @@ function renderLandingPage(context: {
           <h2>Evaluate locally. Upgrade when the team needs a shared runtime.</h2>
           <div class="flow-list">
             <div class="flow-item">
-              <strong>Lint and compile for free</strong>
-              <p>Run the CLI locally or use the live demo to inspect portability issues and generated request bodies.</p>
+              <strong>Lint, diff, and compile for free</strong>
+              <p>Run the CLI locally or use the live demos to inspect portability issues, schema regressions, and generated request bodies.</p>
             </div>
             <div class="flow-item">
               <strong>Buy starter access</strong>
@@ -2492,7 +2504,7 @@ function renderLandingPage(context: {
       <section class="cta-band section">
         <div class="stack">
           <div class="eyebrow compiler-kicker">Start here</div>
-          <h2>See the compiler work before you buy. Then claim a key when it saves real time.</h2>
+          <h2>See the compiler and regression checks work before you buy. Then claim a key when they save real time.</h2>
           <p>That is the whole funnel: prove value fast, keep the free path open, and only ask for money when the shared API is clearly useful.</p>
         </div>
         <div class="actions">
@@ -2720,7 +2732,7 @@ function renderCompilerPage(baseUrl: string): string {
             </details>
             <div class="compiler-output-caption">
               Paid access unlocks the signed shared endpoints for <code>/v1/compile</code>,
-              <code>/v1/lint</code>, and <code>/v1/normalize</code>.
+              <code>/v1/diff</code>, <code>/v1/lint</code>, and <code>/v1/normalize</code>.
             </div>
           </div>
         </div>
@@ -2740,7 +2752,7 @@ function renderCompilerPage(baseUrl: string): string {
           </article>
           <article class="compiler-note-card">
             <div class="eyebrow">Hosted API</div>
-            <p>Use the same compiler behind a stable signed endpoint once CI or multiple engineers depend on it.</p>
+            <p>Use the same compiler and regression guardrail behind a stable signed endpoint once CI or multiple engineers depend on it.</p>
             ${renderCodeBlock(`curl -X POST ${baseUrl}/v1/compile \\
   -H 'content-type: application/json' \\
   -H 'x-api-key: sk_live...' \\
@@ -2764,9 +2776,9 @@ function renderCiPage(baseUrl: string): string {
           <div class="eyebrow">GitHub Action</div>
           <h1>Run Schema Gateway on every pull request.</h1>
           <p>
-            The free GitHub Action lints one schema across provider targets, writes a job summary,
-            and surfaces the first generated request snippet so teams can fix breakage before it
-            lands in production.
+            The free GitHub Action lints one schema across provider targets, can compare a baseline
+            schema against the candidate version, writes a job summary, and surfaces the first
+            generated request snippet so teams can catch regressions before they land in production.
           </p>
           ${renderCodeBlock(PUBLIC_CI_SNIPPET)}
           <div class="actions">
@@ -2778,6 +2790,7 @@ function renderCiPage(baseUrl: string): string {
           <div class="eyebrow">Job summary output</div>
           <ul class="list">
             <li>Compatibility status per provider</li>
+            <li>Optional baseline-vs-candidate regression summary</li>
             <li>Error, warning, and info counts</li>
             <li>Top schema issues with codes</li>
             <li>A generated request snippet for the first provider variant</li>
@@ -2902,8 +2915,8 @@ function renderPricingPage(context: {
           <h1>Start free. Buy once when the shared API saves real engineering time.</h1>
           <p class="spotlight-lede">
             Schema Gateway keeps the evaluation path open: install locally, run the live compiler
-            demo, and only buy when your team wants one stable signed API surface for compiler,
-            lint, and normalize operations.
+            and regression demos, and only buy when your team wants one stable signed API surface for
+            compiler, diff, lint, and normalize operations.
           </p>
           <div class="pricing-compare">
             <div class="pricing-row">
@@ -2913,7 +2926,7 @@ function renderPricingPage(context: {
             </div>
             <div class="pricing-row">
               <strong>Shared API</strong>
-              <span>Signed hosted responses for <code>/v1/compile</code>, <code>/v1/lint</code>, and <code>/v1/normalize</code>.</span>
+              <span>Signed hosted responses for <code>/v1/compile</code>, <code>/v1/diff</code>, <code>/v1/lint</code>, and <code>/v1/normalize</code>.</span>
               <span>Best when CI or multiple engineers need the same stable runtime and claimable key flow.</span>
             </div>
           </div>
@@ -2932,6 +2945,7 @@ function renderPricingPage(context: {
           <p>Buy once, then claim a signed API key from the paid order when you are ready to use the shared endpoints.</p>
           <ul class="pricing-checks">
             <li>Signed compiler bundles from <code>POST /v1/compile</code></li>
+            <li>Signed regression reports from <code>POST /v1/diff</code></li>
             <li>Signed portability reports from <code>POST /v1/lint</code></li>
             <li>Signed normalization results from <code>POST /v1/normalize</code></li>
             <li>Self-serve claim flow after Polar checkout</li>
@@ -3623,9 +3637,11 @@ ${compareLines}
 
 Public demo endpoints:
 - POST /v1/demo/compile
+- POST /v1/demo/diff
 
 Primary paid endpoints:
 - POST /v1/compile
+- POST /v1/diff
 - POST /v1/lint
 - POST /v1/normalize
 - POST /v1/access/polar/claim
@@ -3745,6 +3761,72 @@ app.post("/v1/demo/compile", async (context) => {
 
   return context.json({
     ...bundle,
+    demo: true,
+    signature,
+    limits: {
+      maxBodyBytes: DEMO_MAX_BODY_BYTES,
+      maxSchemaBytes: DEMO_MAX_SCHEMA_BYTES
+    }
+  });
+});
+
+app.post("/v1/demo/diff", async (context) => {
+  const rawBody = await context.req.text();
+  if (countUtf8Bytes(rawBody) > DEMO_MAX_BODY_BYTES) {
+    return context.json(
+      {
+        error: `Demo requests are limited to ${DEMO_MAX_BODY_BYTES.toLocaleString()} bytes.`
+      },
+      413
+    );
+  }
+
+  let parsedBody: unknown;
+  try {
+    parsedBody = JSON.parse(rawBody);
+  } catch {
+    return context.json(
+      {
+        error: "The demo endpoint expects valid JSON."
+      },
+      400
+    );
+  }
+
+  const body = DiffBodySchema.parse(parsedBody);
+  const baselineBytes = countUtf8Bytes(JSON.stringify(body.baselineSchema));
+  const candidateBytes = countUtf8Bytes(JSON.stringify(body.candidateSchema));
+
+  if (baselineBytes > DEMO_MAX_SCHEMA_BYTES || candidateBytes > DEMO_MAX_SCHEMA_BYTES) {
+    return context.json(
+      {
+        error: `Demo schemas are limited to ${DEMO_MAX_SCHEMA_BYTES.toLocaleString()} bytes each.`
+      },
+      413
+    );
+  }
+
+  const targets =
+    body.targets && body.targets.length > 0 ? body.targets : DEMO_DEFAULT_TARGETS;
+  const report = await diffStructuredOutputSchemas({
+    baselineSchema: body.baselineSchema,
+    candidateSchema: body.candidateSchema,
+    targets: targets as SchemaPortabilityTarget[]
+  });
+  const signature = await createSignedEnvelope(context.env.ISSUER_SECRET, {
+    type: "demo_diff",
+    baselineHash: report.baselineHash,
+    candidateHash: report.candidateHash,
+    breakingChangeLikely: report.summary.breakingChangeLikely,
+    affectedProviders: report.summary.affectedProviders,
+    limits: {
+      maxBodyBytes: DEMO_MAX_BODY_BYTES,
+      maxSchemaBytes: DEMO_MAX_SCHEMA_BYTES
+    }
+  });
+
+  return context.json({
+    ...report,
     demo: true,
     signature,
     limits: {
@@ -4059,6 +4141,7 @@ const requireApiKey: MiddlewareHandler<{ Bindings: Bindings; Variables: Variable
 };
 
 app.use("/v1/compile", requireApiKey);
+app.use("/v1/diff", requireApiKey);
 app.use("/v1/normalize", requireApiKey);
 app.use("/v1/lint", requireApiKey);
 
@@ -4126,6 +4209,41 @@ app.post("/v1/normalize", async (context) => {
 
   return context.json({
     ...result,
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    signature,
+    ...(accessPayload
+      ? {
+          accessMode: "stateless",
+          expiresAt: accessPayload.expiresAt
+        }
+      : {})
+  });
+});
+
+app.post("/v1/diff", async (context) => {
+  const body = DiffBodySchema.parse(await context.req.json());
+  const accessPayload = context.get("accessPayload");
+  const keyId = context.get("keyId");
+  const record = context.get("keyRecord");
+  const report = await diffStructuredOutputSchemas({
+    baselineSchema: body.baselineSchema,
+    candidateSchema: body.candidateSchema,
+    ...(body.targets ? { targets: body.targets as SchemaPortabilityTarget[] } : {})
+  });
+  const updatedRecord = await spendCredit(context.env, record);
+
+  const signature = await createSignedEnvelope(context.env.ISSUER_SECRET, {
+    keyId,
+    baselineHash: report.baselineHash,
+    candidateHash: report.candidateHash,
+    breakingChangeLikely: report.summary.breakingChangeLikely,
+    affectedProviders: report.summary.affectedProviders,
+    remainingCredits: accessPayload ? null : updatedRecord.credits,
+    expiresAt: accessPayload?.expiresAt
+  });
+
+  return context.json({
+    ...report,
     remainingCredits: accessPayload ? null : updatedRecord.credits,
     signature,
     ...(accessPayload

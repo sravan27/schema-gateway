@@ -7,7 +7,7 @@ import type { SchemaPortabilityTarget, SupportedProvider } from "@apex-value/sch
 
 import { buildPurchaseMetadata, SchemaGatewayClient } from "./index.js";
 
-type Command = "validate" | "redeem" | "commitment" | "lint" | "claim" | "compile";
+type Command = "validate" | "redeem" | "commitment" | "lint" | "claim" | "compile" | "diff";
 
 interface CliOptions {
   [key: string]: string | boolean | undefined;
@@ -22,12 +22,16 @@ function usage(): string {
     "  schema-gateway lint --schema ./schema.json --remote --api-key sk_live... [--base-url https://worker.example]",
     "  schema-gateway compile --schema ./schema.json [--target openai,gemini] [--name weather_response]",
     "  schema-gateway compile --schema ./schema.json --remote --api-key sk_live... [--base-url https://worker.example]",
+    "  schema-gateway diff --baseline ./schema-old.json --candidate ./schema-new.json [--target openai,gemini]",
+    "  schema-gateway diff --baseline ./schema-old.json --candidate ./schema-new.json --remote --api-key sk_live... [--base-url https://worker.example]",
     "  schema-gateway claim --order-id polar_order... --email you@example.com [--base-url https://worker.example]",
     "  schema-gateway redeem --tx-hash 0x... --label router-service [--base-url https://worker.example]",
     "  schema-gateway commitment --label router-service",
     "",
     "Flags:",
     "  --schema     Path to a JSON schema file",
+    "  --baseline   Path to the baseline JSON schema file",
+    "  --candidate  Path to the candidate JSON schema file",
     "  --payload    Path to a payload file, or '-' to read stdin",
     "  --provider   generic | openai | langchain | ollama",
     "  --remote     Call the paid API instead of local normalization",
@@ -71,7 +75,8 @@ function parseArgs(argv: string[]): { command: Command | null; options: CliOptio
     commandToken === "commitment" ||
     commandToken === "lint" ||
     commandToken === "claim" ||
-    commandToken === "compile"
+    commandToken === "compile" ||
+    commandToken === "diff"
   ) {
     return { command: commandToken, options };
   }
@@ -210,6 +215,38 @@ async function runCompile(options: CliOptions): Promise<void> {
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
 
+async function runDiff(options: CliOptions): Promise<void> {
+  const baselinePath = options.baseline;
+  const candidatePath = options.candidate;
+
+  if (typeof baselinePath !== "string" || typeof candidatePath !== "string") {
+    throw new Error("`diff` requires both --baseline and --candidate.");
+  }
+
+  const [baselineRaw, candidateRaw] = await Promise.all([
+    readFileOrStdin(baselinePath),
+    readFileOrStdin(candidatePath)
+  ]);
+  const targets = parseTargets(options.target);
+
+  const request = {
+    baselineSchema: JSON.parse(baselineRaw) as Record<string, unknown>,
+    candidateSchema: JSON.parse(candidateRaw) as Record<string, unknown>,
+    ...(targets ? { targets } : {})
+  };
+
+  const client = new SchemaGatewayClient({
+    ...(typeof options["api-key"] === "string" ? { apiKey: options["api-key"] } : {}),
+    ...(typeof options["base-url"] === "string" ? { baseUrl: options["base-url"] } : {})
+  });
+
+  const result = options.remote
+    ? await client.diffRemote(request)
+    : await client.diffLocal(request);
+
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+}
+
 async function runRedeem(options: CliOptions): Promise<void> {
   const txHash = options["tx-hash"];
   const label = options.label;
@@ -279,6 +316,9 @@ async function main(): Promise<void> {
       break;
     case "compile":
       await runCompile(options);
+      break;
+    case "diff":
+      await runDiff(options);
       break;
   }
 }

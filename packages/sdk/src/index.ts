@@ -2,10 +2,13 @@ import {
   buildLabelCommitment,
   compileStructuredOutputSchema,
   type CompileSchemaRequest,
+  diffStructuredOutputSchemas,
+  type DiffSchemaRequest,
   type SchemaCompilationBundle,
   lintStructuredOutputSchema,
   type LintSchemaRequest,
   type SchemaPortabilityReport,
+  type SchemaRegressionReport,
   normalizeStructuredOutput,
   type NormalizeRequest,
   type NormalizationResult,
@@ -64,6 +67,13 @@ export interface RemoteCompileResponse extends SchemaCompilationBundle {
   expiresAt?: string;
 }
 
+export interface RemoteDiffResponse extends SchemaRegressionReport {
+  remainingCredits: number | null;
+  signature: `0x${string}`;
+  accessMode?: string;
+  expiresAt?: string;
+}
+
 export class SchemaGatewayClient {
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
@@ -81,6 +91,10 @@ export class SchemaGatewayClient {
 
   lintLocal(request: LintSchemaRequest): Promise<SchemaPortabilityReport> {
     return lintStructuredOutputSchema(request);
+  }
+
+  diffLocal(request: DiffSchemaRequest): Promise<SchemaRegressionReport> {
+    return diffStructuredOutputSchemas(request);
   }
 
   compileLocal(request: CompileSchemaRequest): Promise<SchemaCompilationBundle> {
@@ -180,6 +194,30 @@ export class SchemaGatewayClient {
       }
 
       return (await response.json()) as RemoteLintResponse;
+    });
+  }
+
+  async diffRemote(request: DiffSchemaRequest): Promise<RemoteDiffResponse> {
+    const apiKey = this.apiKey;
+    if (!apiKey) {
+      throw new Error("An API key is required for remote schema diffing.");
+    }
+
+    return withRetry(async () => {
+      const response = await this.fetchImpl(`${this.baseUrl}/v1/diff`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey
+        },
+        body: JSON.stringify(request)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Schema Gateway returned ${response.status} for /v1/diff.`);
+      }
+
+      return (await response.json()) as RemoteDiffResponse;
     });
   }
 

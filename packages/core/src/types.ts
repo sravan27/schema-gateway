@@ -21,6 +21,12 @@ export interface LintSchemaRequest {
   targets?: SchemaPortabilityTarget[];
 }
 
+export interface DiffSchemaRequest {
+  baselineSchema: Record<string, unknown>;
+  candidateSchema: Record<string, unknown>;
+  targets?: SchemaPortabilityTarget[];
+}
+
 export interface CompileSchemaRequest extends LintSchemaRequest {
   name?: string;
   description?: string;
@@ -60,6 +66,41 @@ export interface SchemaProviderReport {
 export interface SchemaPortabilityReport {
   schemaHash: `0x${string}`;
   providers: SchemaProviderReport[];
+}
+
+export interface SchemaChangeRisk {
+  code: string;
+  message: string;
+  path?: string;
+  severity: LintSeverity;
+}
+
+export interface SchemaRegressionProviderReport {
+  provider: SchemaPortabilityTarget;
+  baselineCompatible: boolean;
+  candidateCompatible: boolean;
+  baselineScore: number;
+  candidateScore: number;
+  scoreDelta: number;
+  introducedIssues: SchemaLintIssue[];
+  resolvedIssues: SchemaLintIssue[];
+  persistedIssues: SchemaLintIssue[];
+}
+
+export interface SchemaRegressionSummary {
+  breakingChangeLikely: boolean;
+  introducedErrorCount: number;
+  introducedWarningCount: number;
+  resolvedIssueCount: number;
+  affectedProviders: SchemaPortabilityTarget[];
+}
+
+export interface SchemaRegressionReport {
+  baselineHash: `0x${string}`;
+  candidateHash: `0x${string}`;
+  providers: SchemaRegressionProviderReport[];
+  changeRisks: SchemaChangeRisk[];
+  summary: SchemaRegressionSummary;
 }
 
 export interface SchemaCompileVariant {

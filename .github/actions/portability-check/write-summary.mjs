@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 
-const [lintPath, compilePath, summaryPath, schemaPath] = process.argv.slice(2);
+const [lintPath, compilePath, summaryPath, schemaPath, diffPath] = process.argv.slice(2);
 
 if (!lintPath || !compilePath || !summaryPath || !schemaPath) {
   process.stderr.write("Expected lint, compile, summary, and schema paths.\n");
@@ -9,6 +9,7 @@ if (!lintPath || !compilePath || !summaryPath || !schemaPath) {
 
 const lint = JSON.parse(await fs.readFile(lintPath, "utf8"));
 const compiled = JSON.parse(await fs.readFile(compilePath, "utf8"));
+const diff = diffPath ? JSON.parse(await fs.readFile(diffPath, "utf8")) : null;
 
 const lines = [
   "## Schema Gateway",
@@ -51,6 +52,44 @@ for (const provider of lint.providers ?? []) {
   }
 
   lines.push("");
+}
+
+if (diff) {
+  lines.push("## Regression Check");
+  lines.push("");
+  lines.push(`Baseline hash: \`${diff.baselineHash}\``);
+  lines.push(`Candidate hash: \`${diff.candidateHash}\``);
+  lines.push(
+    `Breaking change likely: **${diff.summary?.breakingChangeLikely ? "yes" : "no"}** | Introduced errors: **${diff.summary?.introducedErrorCount ?? 0}** | Introduced warnings: **${diff.summary?.introducedWarningCount ?? 0}** | Resolved issues: **${diff.summary?.resolvedIssueCount ?? 0}**`
+  );
+
+  if (Array.isArray(diff.summary?.affectedProviders) && diff.summary.affectedProviders.length > 0) {
+    lines.push(`Affected providers: ${diff.summary.affectedProviders.map((provider) => `\`${provider}\``).join(", ")}`);
+  }
+
+  if (Array.isArray(diff.changeRisks) && diff.changeRisks.length > 0) {
+    lines.push("");
+    lines.push("Schema change risks:");
+    for (const risk of diff.changeRisks.slice(0, 5)) {
+      lines.push(`- \`${risk.code}\`: ${risk.message}`);
+    }
+  }
+
+  for (const provider of diff.providers ?? []) {
+    lines.push("");
+    lines.push(`### ${provider.provider} regression view`);
+    lines.push(
+      `Baseline: **${provider.baselineScore}** | Candidate: **${provider.candidateScore}** | Delta: **${provider.scoreDelta}** | Introduced issues: **${provider.introducedIssues?.length ?? 0}** | Resolved issues: **${provider.resolvedIssues?.length ?? 0}**`
+    );
+
+    if (Array.isArray(provider.introducedIssues) && provider.introducedIssues.length > 0) {
+      lines.push("");
+      lines.push("New issues:");
+      for (const issue of provider.introducedIssues.slice(0, 5)) {
+        lines.push(`- \`${issue.code}\`: ${issue.message}`);
+      }
+    }
+  }
 }
 
 await fs.writeFile(summaryPath, `${lines.join("\n")}\n`, "utf8");

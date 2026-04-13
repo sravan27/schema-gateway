@@ -263,7 +263,7 @@ describe("worker", () => {
       RPC_URL: "https://rpc.example"
     };
 
-    const txHash = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
+    const txHash = "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" as const;
     const label = "linting-service";
     const commitment = await buildLabelCommitment(label);
     const topics = encodeEventTopics({
@@ -535,6 +535,194 @@ describe("worker", () => {
       "openai",
       "gemini"
     ]);
+  });
+
+  it("returns a signed public demo regression report without an API key", async () => {
+    const env: Bindings = {
+      ISSUER_SECRET: "test-secret"
+    };
+
+    const response = await app.request(
+      "http://example.test/v1/demo/diff",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          baselineSchema: {
+            type: "object",
+            properties: {
+              city: { type: "string" }
+            },
+            required: [],
+            additionalProperties: false
+          },
+          candidateSchema: {
+            type: "object",
+            properties: {
+              city: { type: "string" },
+              temperatureC: { type: "number" }
+            },
+            required: ["temperatureC"],
+            additionalProperties: false
+          }
+        })
+      },
+      env
+    );
+
+    expect(response.status).toBe(200);
+    const report = (await response.json()) as {
+      demo: boolean;
+      signature: string;
+      summary: {
+        breakingChangeLikely: boolean;
+      };
+      limits: {
+        maxBodyBytes: number;
+        maxSchemaBytes: number;
+      };
+    };
+
+    expect(report.demo).toBe(true);
+    expect(report.signature).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(report.summary.breakingChangeLikely).toBe(true);
+    expect(report.limits.maxBodyBytes).toBe(12000);
+    expect(report.limits.maxSchemaBytes).toBe(6000);
+  });
+
+  it("returns a signed schema regression report and spends one credit", async () => {
+    const env: Bindings = {
+      ACCESS_TTL_SECONDS: "3600",
+      ALLOW_EPHEMERAL_STORAGE: "true",
+      CONTRACT_ADDRESS: "0x0000000000000000000000000000000000000abc",
+      ISSUER_SECRET: "test-secret",
+      RPC_URL: "https://rpc.example"
+    };
+
+    const txHash = "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
+    const label = "schema-regression";
+    const commitment = await buildLabelCommitment(label);
+    const topics = encodeEventTopics({
+      abi: [purchaseEventAbiItem],
+      eventName: "Purchase",
+      args: {
+        buyer: "0x0000000000000000000000000000000000000def",
+        token: "0x0000000000000000000000000000000000000000",
+        keyCommitment: commitment
+      }
+    });
+    const data = encodeAbiParameters(
+      [
+        { type: "uint256" },
+        { type: "uint256" }
+      ],
+      [15n, 3n]
+    );
+
+    globalThis.fetch = vi.fn(async (input) => {
+      if (input !== env.RPC_URL) {
+        throw new Error(`Unexpected fetch target: ${String(input)}`);
+      }
+
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            logs: [
+              {
+                address: env.CONTRACT_ADDRESS,
+                topics,
+                data
+              }
+            ]
+          }
+        }),
+        {
+          status: 200,
+          headers: {
+            "content-type": "application/json"
+          }
+        }
+      );
+    }) as typeof fetch;
+
+    const redeemResponse = await app.request(
+      "http://example.test/v1/access/redeem",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          txHash,
+          label
+        })
+      },
+      env
+    );
+
+    const redeemed = (await redeemResponse.json()) as {
+      apiKey: string;
+    };
+
+    const diffResponse = await app.request(
+      "http://example.test/v1/diff",
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": redeemed.apiKey
+        },
+        body: JSON.stringify({
+          baselineSchema: {
+            type: "object",
+            properties: {
+              city: { type: "string" }
+            },
+            required: [],
+            additionalProperties: false
+          },
+          candidateSchema: {
+            type: "object",
+            properties: {
+              city: { type: "string" },
+              temperatureC: { type: "number" }
+            },
+            required: ["temperatureC"]
+          },
+          targets: ["openai", "gemini"]
+        })
+      },
+      env
+    );
+
+    expect(diffResponse.status).toBe(200);
+    const report = (await diffResponse.json()) as {
+      baselineHash: string;
+      candidateHash: string;
+      remainingCredits: number;
+      signature: string;
+      summary: {
+        breakingChangeLikely: boolean;
+        affectedProviders: string[];
+      };
+      providers: Array<{
+        provider: string;
+        scoreDelta: number;
+        introducedIssues: Array<{ code: string }>;
+      }>;
+    };
+
+    expect(report.baselineHash).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(report.candidateHash).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(report.signature).toMatch(/^0x[a-f0-9]{64}$/);
+    expect(report.remainingCredits).toBe(2);
+    expect(report.summary.breakingChangeLikely).toBe(true);
+    expect(report.summary.affectedProviders).toContain("openai");
+    expect(report.providers[0]?.introducedIssues.length).toBeGreaterThan(0);
   });
 
   it("claims stateless Polar access and uses it without KV storage", async () => {

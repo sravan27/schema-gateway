@@ -5,6 +5,10 @@ inputs:
   schema:
     description: "Path to the JSON schema file relative to the working directory."
     required: true
+  baseline-schema:
+    description: "Optional path to the previous schema version. When set, Schema Gateway also computes a regression report."
+    required: false
+    default: ""
   targets:
     description: "Comma-separated provider targets."
     required: false
@@ -29,6 +33,10 @@ inputs:
     description: "Fail the workflow when portability errors are detected."
     required: false
     default: "true"
+  fail-on-regressions:
+    description: "Fail the workflow when the diff report flags a likely breaking change."
+    required: false
+    default: "true"
 
 outputs:
   has-errors:
@@ -40,6 +48,12 @@ outputs:
   compile-report-path:
     description: "Temporary path to the generated compile report JSON file."
     value: ${{ steps.analyze.outputs.compile-report-path }}
+  diff-report-path:
+    description: "Temporary path to the generated diff report JSON file when baseline-schema is set."
+    value: ${{ steps.analyze.outputs.diff-report-path }}
+  has-regressions:
+    description: "Whether the optional diff report flags a likely breaking change."
+    value: ${{ steps.analyze.outputs.has-regressions }}
 
 runs:
   using: "composite"
@@ -74,6 +88,13 @@ runs:
         if [[ "${{ inputs.working-directory }}" != "." ]]; then
           SCHEMA_PATH="${{ inputs.working-directory }}/${{ inputs.schema }}"
         fi
+        BASELINE_SCHEMA_PATH=""
+        if [[ -n "${{ inputs.baseline-schema }}" ]]; then
+          BASELINE_SCHEMA_PATH="${{ inputs.baseline-schema }}"
+          if [[ "${{ inputs.working-directory }}" != "." ]]; then
+            BASELINE_SCHEMA_PATH="${{ inputs.working-directory }}/${{ inputs.baseline-schema }}"
+          fi
+        fi
 
         node "$ACTION_ROOT/packages/sdk/dist/cli.js" lint \
           --schema "$SCHEMA_PATH" \
@@ -88,18 +109,38 @@ runs:
           --prompt "${{ inputs.prompt }}" \
           > "$REPORT_DIR/compile.json"
 
+        DIFF_REPORT_PATH=""
+        HAS_REGRESSIONS="false"
+        if [[ -n "$BASELINE_SCHEMA_PATH" ]]; then
+          node "$ACTION_ROOT/packages/sdk/dist/cli.js" diff \
+            --baseline "$BASELINE_SCHEMA_PATH" \
+            --candidate "$SCHEMA_PATH" \
+            --target "${{ inputs.targets }}" \
+            > "$REPORT_DIR/diff.json"
+          DIFF_REPORT_PATH="$REPORT_DIR/diff.json"
+          HAS_REGRESSIONS="$(node "$GITHUB_ACTION_PATH/has-regressions.mjs" "$DIFF_REPORT_PATH")"
+        fi
+
         node "$GITHUB_ACTION_PATH/write-summary.mjs" \
           "$REPORT_DIR/lint.json" \
           "$REPORT_DIR/compile.json" \
           "$GITHUB_STEP_SUMMARY" \
-          "$SCHEMA_PATH"
+          "$SCHEMA_PATH" \
+          "$DIFF_REPORT_PATH"
 
         HAS_ERRORS="$(node "$GITHUB_ACTION_PATH/has-errors.mjs" "$REPORT_DIR/lint.json")"
         echo "has-errors=$HAS_ERRORS" >> "$GITHUB_OUTPUT"
         echo "lint-report-path=$REPORT_DIR/lint.json" >> "$GITHUB_OUTPUT"
         echo "compile-report-path=$REPORT_DIR/compile.json" >> "$GITHUB_OUTPUT"
+        echo "diff-report-path=$DIFF_REPORT_PATH" >> "$GITHUB_OUTPUT"
+        echo "has-regressions=$HAS_REGRESSIONS" >> "$GITHUB_OUTPUT"
 
         if [[ "${{ inputs.fail-on-errors }}" == "true" && "$HAS_ERRORS" == "true" ]]; then
           echo "Schema Gateway found portability errors." >&2
+          exit 1
+        fi
+
+        if [[ -n "$DIFF_REPORT_PATH" && "${{ inputs.fail-on-regressions }}" == "true" && "$HAS_REGRESSIONS" == "true" ]]; then
+          echo "Schema Gateway found likely breaking schema regressions." >&2
           exit 1
         fi

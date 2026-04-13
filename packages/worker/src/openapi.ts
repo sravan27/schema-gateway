@@ -86,6 +86,52 @@ export const openApiDocument = {
         }
       }
     },
+    "/v1/demo/diff": {
+      post: {
+        summary: "Run the public schema regression demo",
+        description:
+          "Compares two small schemas and reports provider-specific portability regressions without an API key. Intended for interactive evaluation before purchase.",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  baselineSchema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  candidateSchema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  targets: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["openai", "gemini", "anthropic", "ollama"]
+                    }
+                  }
+                },
+                required: ["baselineSchema", "candidateSchema"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Signed demo regression report"
+          },
+          "400": {
+            description: "Invalid JSON or request body"
+          },
+          "413": {
+            description: "Demo body or schema exceeded size limits"
+          }
+        }
+      }
+    },
     "/v1/access/redeem": {
       post: {
         summary: "Redeem an on-chain purchase receipt for an API key",
@@ -250,6 +296,53 @@ export const openApiDocument = {
         responses: {
           "200": {
             description: "Signed provider compilation bundle"
+          },
+          "401": {
+            description: "Missing or invalid API key"
+          },
+          "402": {
+            description: "API key has no credits remaining"
+          }
+        }
+      }
+    },
+    "/v1/diff": {
+      post: {
+        summary: "Compare two schemas for provider portability regressions",
+        description:
+          "Returns provider-specific introduced issues, resolved issues, score deltas, and generic schema change risks so CI can catch regressions before rollout.",
+        security: [{ apiKeyHeader: [] }],
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  baselineSchema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  candidateSchema: {
+                    type: "object",
+                    additionalProperties: true
+                  },
+                  targets: {
+                    type: "array",
+                    items: {
+                      type: "string",
+                      enum: ["openai", "gemini", "anthropic", "ollama"]
+                    }
+                  }
+                },
+                required: ["baselineSchema", "candidateSchema"]
+              }
+            }
+          }
+        },
+        responses: {
+          "200": {
+            description: "Signed schema regression report"
           },
           "401": {
             description: "Missing or invalid API key"
