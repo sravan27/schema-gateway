@@ -2,13 +2,13 @@
 
 [![CI](https://github.com/sravan27/schema-gateway/actions/workflows/ci.yml/badge.svg)](https://github.com/sravan27/schema-gateway/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/sravan27/schema-gateway?display_name=tag)](https://github.com/sravan27/schema-gateway/releases)
-[![Live Demo](https://img.shields.io/badge/live-demo-0f766e)](https://schema-gateway.sridharsravan.workers.dev/compiler#demo)
+[![Live Diff Demo](https://img.shields.io/badge/live-regression%20demo-0f766e)](https://schema-gateway.sridharsravan.workers.dev/diff#demo)
 [![Buy Access](https://img.shields.io/badge/buy-starter%20access-111827)](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK)
 [![Claim Access](https://img.shields.io/badge/claim-paid%20key-f3f4f6?logo=cloudflare&logoColor=f97316&labelColor=111827)](https://schema-gateway.sridharsravan.workers.dev/claim)
 
 Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini, Anthropic, and Ollama, then catch portability drift and schema regressions before they break CI or production.
 
-[Install from GitHub release](https://schema-gateway.sridharsravan.workers.dev/install) · [Run the live compiler demo](https://schema-gateway.sridharsravan.workers.dev/compiler#demo) · [Buy starter access](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK) · [Claim a paid key](https://schema-gateway.sridharsravan.workers.dev/claim)
+[Install from GitHub release](https://schema-gateway.sridharsravan.workers.dev/install) · [Run the live regression demo](https://schema-gateway.sridharsravan.workers.dev/diff#demo) · [Run the live compiler demo](https://schema-gateway.sridharsravan.workers.dev/compiler#demo) · [Buy starter access](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK) · [Claim a paid key](https://schema-gateway.sridharsravan.workers.dev/claim)
 
 ![Schema Gateway hero](docs/assets/readme-hero.png)
 
@@ -33,8 +33,8 @@ Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini,
 
 | Goal | Path |
 | --- | --- |
-| Prove the value in under a minute | [Run the free demo compiler](https://schema-gateway.sridharsravan.workers.dev/compiler#demo) |
-| Check whether a schema change is risky | `schema-gateway diff --baseline ./old.json --candidate ./new.json` |
+| Prove the value in under a minute | [Run the free regression demo](https://schema-gateway.sridharsravan.workers.dev/diff#demo) |
+| Check whether a schema change is risky | [Open the diff page](https://schema-gateway.sridharsravan.workers.dev/diff) or run `schema-gateway diff --baseline ./old.json --candidate ./new.json` |
 | Install without waiting on npm | [Use the release installer](https://schema-gateway.sridharsravan.workers.dev/install) |
 | Add a portability check to CI | [Use the reusable GitHub Action](https://schema-gateway.sridharsravan.workers.dev/ci) |
 | Buy the hosted API | [Starter access checkout](https://buy.polar.sh/polar_cl_tbNmk0GPoBOkWGf7i5PImNjhCTuDmpijaEbGy0B6ZOK) |
@@ -43,9 +43,11 @@ Compile one JSON Schema into provider-ready request payloads for OpenAI, Gemini,
 Live surfaces:
 
 - Site: [https://schema-gateway.sridharsravan.workers.dev](https://schema-gateway.sridharsravan.workers.dev)
+- Diff: [https://schema-gateway.sridharsravan.workers.dev/diff](https://schema-gateway.sridharsravan.workers.dev/diff)
 - Comparisons: [https://schema-gateway.sridharsravan.workers.dev/compare](https://schema-gateway.sridharsravan.workers.dev/compare)
 - Compiler: [https://schema-gateway.sridharsravan.workers.dev/compiler](https://schema-gateway.sridharsravan.workers.dev/compiler)
 - Free demo: [https://schema-gateway.sridharsravan.workers.dev/compiler#demo](https://schema-gateway.sridharsravan.workers.dev/compiler#demo)
+- Regression demo: [https://schema-gateway.sridharsravan.workers.dev/diff#demo](https://schema-gateway.sridharsravan.workers.dev/diff#demo)
 - Regression demo API: [https://schema-gateway.sridharsravan.workers.dev/v1/demo/diff](https://schema-gateway.sridharsravan.workers.dev/v1/demo/diff)
 - GitHub CI: [https://schema-gateway.sridharsravan.workers.dev/ci](https://schema-gateway.sridharsravan.workers.dev/ci)
 - Install: [https://schema-gateway.sridharsravan.workers.dev/install](https://schema-gateway.sridharsravan.workers.dev/install)
@@ -101,6 +103,7 @@ It also ships indexable comparison pages for:
 And an install page for release-tarball distribution:
 
 - GitHub release installer: `/install`
+- Schema regression guardrail: `/diff`
 - Schema compiler: `/compiler`
 - Live compiler demo: `/compiler#demo`
 - GitHub Action guide: `/ci`

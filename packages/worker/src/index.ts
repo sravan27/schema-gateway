@@ -250,6 +250,33 @@ const DEMO_SAMPLE_SCHEMA = {
   required: ["city", "temperatureC", "condition", "advisories"],
   additionalProperties: false
 } satisfies Record<string, unknown>;
+const DEMO_BASELINE_SCHEMA = {
+  type: "object",
+  properties: {
+    city: { type: "string" },
+    condition: { type: "string" },
+    advisories: {
+      type: "array",
+      items: { type: "string" }
+    }
+  },
+  required: ["city", "condition"],
+  additionalProperties: false
+} satisfies Record<string, unknown>;
+const DEMO_CANDIDATE_SCHEMA = {
+  type: "object",
+  properties: {
+    city: { type: "string" },
+    condition: { type: "string" },
+    advisories: {
+      type: "array",
+      items: { type: "string" }
+    },
+    temperatureC: { type: "number" }
+  },
+  required: ["city", "condition", "temperatureC"],
+  additionalProperties: false
+} satisfies Record<string, unknown>;
 const PUBLIC_CI_SNIPPET = `name: Schema portability
 
 on:
@@ -271,6 +298,10 @@ const PUBLIC_COMPILE_SNIPPET = `schema-gateway compile \\
   --schema ./schema.json \\
   --target openai,gemini,anthropic,ollama \\
   --name extraction_result`;
+const PUBLIC_DIFF_SNIPPET = `schema-gateway diff \\
+  --baseline ./schema-old.json \\
+  --candidate ./schema-new.json \\
+  --target openai,gemini,anthropic,ollama`;
 const ROOT_FAQ = [
   {
     question: "What problem does Schema Gateway solve?",
@@ -428,7 +459,7 @@ function renderSiteNav(baseUrl: string): string {
   return `<nav class="site-nav">
     <a class="brand" href="${escapeHtml(baseUrl)}/">Schema Gateway</a>
     <div class="nav-links">
-      <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
+      <a href="${escapeHtml(baseUrl)}/diff">Diff</a>
       <a href="${escapeHtml(baseUrl)}/compiler">Compiler</a>
       <a href="${escapeHtml(baseUrl)}/ci">CI</a>
       <a href="${escapeHtml(baseUrl)}/install">Install</a>
@@ -445,6 +476,7 @@ function renderSiteFooter(baseUrl: string): string {
     <div>Schema Gateway ships provider-portable schema validation for OpenAI, Gemini, Anthropic, Ollama, and framework wrappers.</div>
     <div class="footer-links">
       <a href="${escapeHtml(baseUrl)}/">Home</a>
+      <a href="${escapeHtml(baseUrl)}/diff">Diff</a>
       <a href="${escapeHtml(baseUrl)}/compare">Comparisons</a>
       <a href="${escapeHtml(baseUrl)}/compiler">Compiler</a>
       <a href="${escapeHtml(baseUrl)}/ci">CI</a>
@@ -795,6 +827,428 @@ function renderCompilerDemoScript(baseUrl: string): string {
 
   syncTargetToggles();
   setStatus("Loading a sample compile run...", "loading");
+  void runDemo();
+})();
+</script>`;
+}
+
+function renderDiffDemoScript(baseUrl: string): string {
+  return `<script>
+(() => {
+  const form = document.getElementById("demo-diff-form");
+  const baselineField = document.getElementById("demo-diff-baseline");
+  const candidateField = document.getElementById("demo-diff-candidate");
+  const targetsField = document.getElementById("demo-diff-targets");
+  const status = document.getElementById("demo-diff-status");
+  const summary = document.getElementById("demo-diff-summary");
+  const rawOutput = document.getElementById("demo-diff-raw-output");
+  const useSampleButton = document.getElementById("demo-diff-use-sample");
+  const runButton = document.getElementById("demo-diff-run");
+  const targetToggles = Array.from(document.querySelectorAll("[data-demo-diff-target]"));
+  const endpoint = ${JSON.stringify(`${baseUrl}/v1/demo/diff`)};
+  const sampleBaseline = ${JSON.stringify(JSON.stringify(DEMO_BASELINE_SCHEMA, null, 2))};
+  const sampleCandidate = ${JSON.stringify(JSON.stringify(DEMO_CANDIDATE_SCHEMA, null, 2))};
+
+  if (!(form instanceof HTMLFormElement) || !(baselineField instanceof HTMLTextAreaElement) || !(candidateField instanceof HTMLTextAreaElement) || !(targetsField instanceof HTMLInputElement) || !(status instanceof HTMLElement) || !(summary instanceof HTMLElement) || !(rawOutput instanceof HTMLElement)) {
+    return;
+  }
+
+  function clearNode(node) {
+    while (node.firstChild) {
+      node.removeChild(node.firstChild);
+    }
+  }
+
+  function makeNode(tagName, className, text) {
+    const node = document.createElement(tagName);
+    if (className) {
+      node.className = className;
+    }
+    if (typeof text === "string") {
+      node.textContent = text;
+    }
+    return node;
+  }
+
+  function stringifyPreview(value) {
+    const raw = JSON.stringify(value, null, 2);
+    if (raw.length <= 1000) {
+      return raw;
+    }
+    return raw.slice(0, 1000) + "\\n...";
+  }
+
+  function issuePreview(issues, emptyMessage) {
+    if (!Array.isArray(issues) || issues.length === 0) {
+      return emptyMessage;
+    }
+
+    return issues
+      .slice(0, 8)
+      .map((issue) => {
+        const code = issue && typeof issue.code === "string" ? issue.code : "issue";
+        const severity = issue && typeof issue.severity === "string" ? issue.severity.toUpperCase() : "INFO";
+        const path = issue && typeof issue.path === "string" ? " @ " + issue.path : "";
+        const message = issue && typeof issue.message === "string" ? issue.message : "No message";
+        return severity + " " + code + path + ": " + message;
+      })
+      .join("\\n");
+  }
+
+  function formatDelta(value) {
+    const numeric = typeof value === "number" ? value : 0;
+    return numeric > 0 ? "+" + String(numeric) : String(numeric);
+  }
+
+  function setStatus(message, variant) {
+    status.textContent = message;
+    status.dataset.variant = variant;
+  }
+
+  function syncTargetToggles() {
+    const activeTargets = new Set(
+      targetsField.value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    );
+
+    for (const toggle of targetToggles) {
+      const target = toggle.getAttribute("data-demo-diff-target");
+      const active = !!target && activeTargets.has(target);
+      toggle.setAttribute("aria-pressed", active ? "true" : "false");
+      toggle.classList.toggle("is-active", active);
+    }
+  }
+
+  function renderError(message, rawValue) {
+    clearNode(summary);
+    const card = makeNode("div", "demo-empty-state");
+    card.append(makeNode("div", "demo-empty-kicker", "Regression demo failed"));
+    card.append(makeNode("div", "demo-empty-title", message));
+    card.append(makeNode("p", "demo-empty-copy", "Fix the schema JSON or targets, then run the comparison again."));
+    summary.append(card);
+    rawOutput.textContent = typeof rawValue === "string" ? rawValue : JSON.stringify(rawValue, null, 2);
+  }
+
+  function renderPayload(payload) {
+    clearNode(summary);
+    rawOutput.textContent = JSON.stringify(payload, null, 2);
+
+    const header = makeNode("div", "demo-summary-head");
+    const heading = makeNode("div", "stack");
+    heading.append(makeNode("div", "demo-summary-kicker", "Hosted regression result"));
+    heading.append(
+      makeNode(
+        "div",
+        "demo-summary-title",
+        payload.summary && payload.summary.breakingChangeLikely
+          ? "Breaking change likely across " + String(Array.isArray(payload.summary.affectedProviders) ? payload.summary.affectedProviders.length : 0) + " provider" + ((Array.isArray(payload.summary.affectedProviders) ? payload.summary.affectedProviders.length : 0) === 1 ? "" : "s")
+          : "No likely breaking change detected"
+      )
+    );
+    const badge = makeNode(
+      "div",
+      payload.summary && payload.summary.breakingChangeLikely ? "demo-badge" : "demo-badge",
+      payload.demo ? "Free demo" : "Signed API"
+    );
+    header.append(heading, badge);
+    summary.append(header);
+
+    const stats = makeNode("div", "demo-provider-stats");
+    stats.append(
+      makeNode(
+        "span",
+        "demo-provider-stat",
+        "Introduced errors " + String(payload.summary && typeof payload.summary.introducedErrorCount === "number" ? payload.summary.introducedErrorCount : 0)
+      ),
+      makeNode(
+        "span",
+        "demo-provider-stat",
+        "Warnings " + String(payload.summary && typeof payload.summary.introducedWarningCount === "number" ? payload.summary.introducedWarningCount : 0)
+      ),
+      makeNode(
+        "span",
+        "demo-provider-stat",
+        "Resolved " + String(payload.summary && typeof payload.summary.resolvedIssueCount === "number" ? payload.summary.resolvedIssueCount : 0)
+      ),
+      makeNode(
+        "span",
+        "demo-provider-stat",
+        Array.isArray(payload.summary && payload.summary.affectedProviders)
+          ? payload.summary.affectedProviders.length + " provider" + (payload.summary.affectedProviders.length === 1 ? "" : "s") + " affected"
+          : "0 providers affected"
+      )
+    );
+    summary.append(stats);
+
+    if (Array.isArray(payload.changeRisks) && payload.changeRisks.length > 0) {
+      const riskPanel = makeNode("div", "demo-info-panel");
+      riskPanel.append(
+        makeNode("div", "demo-provider-variant-label", "Schema-level change risks"),
+        makeNode(
+          "p",
+          "demo-provider-copy",
+          payload.changeRisks.length === 1
+            ? "One schema shape change looks risky before provider-specific checks are even considered."
+            : String(payload.changeRisks.length) + " schema shape changes look risky before provider-specific checks are even considered."
+        )
+      );
+      const riskPre = document.createElement("pre");
+      const riskCode = document.createElement("code");
+      riskCode.textContent = issuePreview(payload.changeRisks, "No global schema risks detected.");
+      riskPre.append(riskCode);
+      riskPanel.append(riskPre);
+      summary.append(riskPanel);
+    }
+
+    if (Array.isArray(payload.providers)) {
+      const tabs = makeNode("div", "demo-provider-tabs");
+      const inspector = makeNode("div", "demo-inspector");
+      let activeProviderIndex = 0;
+      let activeView = "introduced";
+
+      function renderInspector() {
+        clearNode(tabs);
+        clearNode(inspector);
+
+        payload.providers.forEach((provider, index) => {
+          const button = makeNode(
+            "button",
+            index === activeProviderIndex ? "demo-tab is-active" : "demo-tab"
+          );
+          button.type = "button";
+          button.append(
+            makeNode("span", "demo-tab-title", provider.provider),
+            makeNode("span", "demo-tab-subtitle", "Delta " + formatDelta(provider.scoreDelta))
+          );
+          button.addEventListener("click", () => {
+            activeProviderIndex = index;
+            activeView = "introduced";
+            renderInspector();
+          });
+          tabs.append(button);
+        });
+
+        const provider = payload.providers[activeProviderIndex];
+        if (!provider) {
+          return;
+        }
+
+        const top = makeNode("div", "demo-inspector-top");
+        const left = makeNode("div", "stack");
+        left.append(
+          makeNode("div", "demo-provider-heading", provider.provider),
+          makeNode(
+            "p",
+            "demo-provider-copy",
+            provider.baselineCompatible && !provider.candidateCompatible
+              ? "This provider looked safe before and no longer does in the candidate schema."
+              : provider.scoreDelta < 0
+                ? "Compatibility got worse for this provider after the schema change."
+                : "No new regression was detected for this provider."
+          )
+        );
+        const state = makeNode(
+          "div",
+          provider.baselineCompatible && !provider.candidateCompatible
+            ? "demo-provider-badge is-fix"
+            : provider.scoreDelta < 0
+              ? "demo-provider-badge is-fix"
+              : "demo-provider-badge is-good",
+          provider.baselineCompatible && !provider.candidateCompatible
+            ? "Regression introduced"
+            : provider.scoreDelta < 0
+              ? "Needs review"
+              : "Stable"
+        );
+        top.append(left, state);
+
+        const providerStats = makeNode("div", "demo-provider-stats");
+        providerStats.append(
+          makeNode("span", "demo-provider-stat", "Baseline " + String(provider.baselineScore)),
+          makeNode("span", "demo-provider-stat", "Candidate " + String(provider.candidateScore)),
+          makeNode("span", "demo-provider-stat", "Delta " + formatDelta(provider.scoreDelta)),
+          makeNode(
+            "span",
+            "demo-provider-stat",
+            String(Array.isArray(provider.introducedIssues) ? provider.introducedIssues.length : 0) + " introduced"
+          ),
+          makeNode(
+            "span",
+            "demo-provider-stat",
+            String(Array.isArray(provider.resolvedIssues) ? provider.resolvedIssues.length : 0) + " resolved"
+          )
+        );
+
+        const body = makeNode("div", "demo-inspector-body");
+        const meta = makeNode("div", "demo-info-panel");
+        meta.append(
+          makeNode("div", "demo-provider-variant-label", "Compatibility change"),
+          makeNode(
+            "p",
+            "demo-provider-copy",
+            "Baseline: " +
+              (provider.baselineCompatible ? "compatible" : "needs fixes") +
+              " • Candidate: " +
+              (provider.candidateCompatible ? "compatible" : "needs fixes")
+          )
+        );
+
+        const codeShell = makeNode("div", "demo-code-panel");
+        const viewTabs = makeNode("div", "demo-variant-tabs");
+        const views = [
+          {
+            key: "introduced",
+            label: "Introduced",
+            value: issuePreview(provider.introducedIssues, "No new issues were introduced for this provider.")
+          },
+          {
+            key: "resolved",
+            label: "Resolved",
+            value: issuePreview(provider.resolvedIssues, "No previously reported issues were resolved for this provider.")
+          },
+          {
+            key: "persisted",
+            label: "Persisted",
+            value: issuePreview(provider.persistedIssues, "No issues persisted for this provider.")
+          }
+        ];
+
+        views.forEach((view) => {
+          const button = makeNode(
+            "button",
+            view.key === activeView ? "demo-variant-tab is-active" : "demo-variant-tab",
+            view.label
+          );
+          button.type = "button";
+          button.addEventListener("click", () => {
+            activeView = view.key;
+            renderInspector();
+          });
+          viewTabs.append(button);
+        });
+
+        const activePreview =
+          views.find((view) => view.key === activeView) ??
+          views[0];
+        const variantLabel = makeNode(
+          "div",
+          "demo-provider-variant-label",
+          activePreview ? activePreview.label + " issue list" : "Issue list"
+        );
+        const codeBlock = document.createElement("pre");
+        const code = document.createElement("code");
+        code.textContent = activePreview ? activePreview.value : "{}";
+        codeBlock.append(code);
+        codeShell.append(viewTabs, variantLabel, codeBlock);
+
+        body.append(meta, codeShell);
+        inspector.append(top, providerStats, body);
+      }
+
+      summary.append(tabs, inspector);
+      renderInspector();
+    }
+  }
+
+  async function runDemo() {
+    let baselineSchema;
+    let candidateSchema;
+
+    try {
+      baselineSchema = JSON.parse(baselineField.value);
+      candidateSchema = JSON.parse(candidateField.value);
+    } catch (error) {
+      setStatus("Baseline or candidate schema JSON is invalid. Fix the syntax and try again.", "error");
+      renderError("Baseline or candidate schema JSON is invalid.", error instanceof Error ? error.message : String(error));
+      return;
+    }
+
+    const targets = targetsField.value
+      .split(",")
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    runButton?.setAttribute("disabled", "disabled");
+    setStatus("Running the free regression demo...", "loading");
+    clearNode(summary);
+    rawOutput.textContent = "";
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          baselineSchema,
+          candidateSchema,
+          ...(targets.length > 0 ? { targets } : {})
+        })
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        setStatus(payload.error ?? "The regression demo request failed.", "error");
+        renderError(payload.error ?? "The regression demo request failed.", payload);
+        return;
+      }
+
+      setStatus(
+        payload.summary && payload.summary.breakingChangeLikely
+          ? "Potential breaking change detected. Check the provider tabs before you merge."
+          : "No likely breaking regression detected for the selected targets.",
+        payload.summary && payload.summary.breakingChangeLikely ? "error" : "success"
+      );
+      renderPayload(payload);
+    } catch (error) {
+      setStatus("Network error while calling the regression demo endpoint.", "error");
+      renderError("Network error while calling the regression demo endpoint.", error instanceof Error ? error.message : String(error));
+    } finally {
+      runButton?.removeAttribute("disabled");
+    }
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await runDemo();
+  });
+
+  useSampleButton?.addEventListener("click", () => {
+    baselineField.value = sampleBaseline;
+    candidateField.value = sampleCandidate;
+    targetsField.value = ${JSON.stringify(DEMO_DEFAULT_TARGETS.join(","))};
+    syncTargetToggles();
+    setStatus("Sample baseline and candidate schemas loaded. Run the demo to inspect regressions.", "idle");
+  });
+
+  targetToggles.forEach((toggle) => {
+    toggle.addEventListener("click", () => {
+      const target = toggle.getAttribute("data-demo-diff-target");
+      if (!target) {
+        return;
+      }
+
+      const targets = targetsField.value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+      const targetSet = new Set(targets);
+
+      if (targetSet.has(target) && targetSet.size > 1) {
+        targetSet.delete(target);
+      } else {
+        targetSet.add(target);
+      }
+
+      targetsField.value = Array.from(targetSet).join(",");
+      syncTargetToggles();
+    });
+  });
+
+  syncTargetToggles();
+  setStatus("Loading a sample regression run...", "loading");
   void runDemo();
 })();
 </script>`;
@@ -2401,8 +2855,9 @@ function renderLandingPage(context: {
             </div>
           </div>
           <div class="actions">
-            <a class="primary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Run free live demo</a>
+            <a class="primary" href="${escapeHtml(context.baseUrl)}/diff#demo">Run free regression demo</a>
             ${checkoutMarkup}
+            <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Open compiler</a>
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/pricing">See pricing</a>
             <a class="secondary" href="${escapeHtml(context.baseUrl)}/claim">Claim key</a>
           </div>
@@ -2440,7 +2895,7 @@ function renderLandingPage(context: {
             </div>
           </div>
           <div class="spotlight-window">
-            ${renderCodeBlock(`${liveDemoSnippet}\n\n${diffDemoSnippet}`)}
+            ${renderCodeBlock(`${diffDemoSnippet}\n\n${liveDemoSnippet}`)}
           </div>
           <p class="meta">Base URL: <code>${escapeHtml(context.baseUrl)}</code></p>
         </aside>
@@ -2451,8 +2906,8 @@ function renderLandingPage(context: {
           <p>One schema that passes local validation can still fail under OpenAI strict mode, Gemini subsets, or compatibility layers.</p>
         </article>
         <article class="compact-card">
-          <div class="eyebrow">Free evaluation</div>
-          <p>Try the live compiler and schema regression demos or install from GitHub before you buy anything.</p>
+          <div class="eyebrow">Regression-first evaluation</div>
+          <p>Run the live schema regression demo before you buy anything. It is the fastest path to seeing whether a change is safe to merge.</p>
         </article>
         <article class="compact-card">
           <div class="eyebrow">Paid when shared API matters</div>
@@ -2465,7 +2920,7 @@ function renderLandingPage(context: {
           <h2>Evaluate locally. Upgrade when the team needs a shared runtime.</h2>
           <div class="flow-list">
             <div class="flow-item">
-              <strong>Lint, diff, and compile for free</strong>
+              <strong>Diff, lint, and compile for free</strong>
               <p>Run the CLI locally or use the live demos to inspect portability issues, schema regressions, and generated request bodies.</p>
             </div>
             <div class="flow-item">
@@ -2504,11 +2959,12 @@ function renderLandingPage(context: {
       <section class="cta-band section">
         <div class="stack">
           <div class="eyebrow compiler-kicker">Start here</div>
-          <h2>See the compiler and regression checks work before you buy. Then claim a key when they save real time.</h2>
+          <h2>See the regression and compiler checks work before you buy. Then claim a key when they save real time.</h2>
           <p>That is the whole funnel: prove value fast, keep the free path open, and only ask for money when the shared API is clearly useful.</p>
         </div>
         <div class="actions">
-          <a class="primary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Open live demo</a>
+          <a class="primary" href="${escapeHtml(context.baseUrl)}/diff#demo">Open regression demo</a>
+          <a class="secondary" href="${escapeHtml(context.baseUrl)}/compiler#demo">Open compiler demo</a>
           <a class="secondary" href="${escapeHtml(context.baseUrl)}/pricing">Open pricing</a>
           <a class="secondary" href="${escapeHtml(context.baseUrl)}/claim">Claim access</a>
           <a class="secondary" href="${escapeHtml(context.baseUrl)}/install">Install from GitHub</a>
@@ -2764,6 +3220,207 @@ function renderCompilerPage(baseUrl: string): string {
   });
 }
 
+function renderDiffPage(baseUrl: string): string {
+  const baselineSchema = JSON.stringify(DEMO_BASELINE_SCHEMA, null, 2);
+  const candidateSchema = JSON.stringify(DEMO_CANDIDATE_SCHEMA, null, 2);
+  const previewSnippet = `{
+  "summary": {
+    "breakingChangeLikely": true,
+    "introducedErrorCount": 2,
+    "introducedWarningCount": 1,
+    "resolvedIssueCount": 0,
+    "affectedProviders": ["openai", "gemini"]
+  },
+  "providers": [
+    {
+      "provider": "openai",
+      "scoreDelta": -12,
+      "introducedIssues": ["required field drift"]
+    }
+  ]
+}`;
+  return renderMarketingPage({
+    baseUrl,
+    path: "/diff",
+    title: "Schema Gateway Diff | Catch schema regressions before merge",
+    description:
+      "Compare a baseline and candidate JSON Schema, catch provider-specific regressions, and decide whether a structured-output change is safe before it lands in CI or production.",
+    body: `<section class="panel compiler-hero-shell">
+        <article class="compiler-hero-copy stack">
+          <div class="eyebrow compiler-kicker">Schema regression guardrail</div>
+          <h1>Catch schema regressions before they ship.</h1>
+          <p class="compiler-lede">
+            Schema Gateway compares a baseline schema against the candidate version, surfaces
+            provider-specific regressions, and tells you when a change is likely breaking before it
+            hits CI or production. This is the quickest way to prove the product saves real time.
+          </p>
+          <div class="compiler-stat-row">
+            <div class="compiler-stat">
+              <strong>Baseline vs candidate</strong>
+              <span>one report across provider targets</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>Breaking verdict</strong>
+              <span>before merge or rollout</span>
+            </div>
+            <div class="compiler-stat">
+              <strong>CI ready</strong>
+              <span>same diff engine in the GitHub Action</span>
+            </div>
+          </div>
+          ${renderCodeBlock(PUBLIC_DIFF_SNIPPET)}
+          <div class="actions">
+            <a class="primary" href="${escapeHtml(baseUrl)}/diff#demo">Run free regression demo</a>
+            <a class="secondary" href="${escapeHtml(baseUrl)}/ci">Add to CI</a>
+            <a class="secondary" href="${escapeHtml(baseUrl)}/pricing">Buy full API</a>
+          </div>
+          <div class="compiler-hero-note">
+            The hosted regression endpoint is available at <code>POST /v1/diff</code>, and the free
+            demo is available at <code>POST /v1/demo/diff</code>.
+          </div>
+        </article>
+        <aside class="compiler-preview">
+          <div class="eyebrow">Regression preview</div>
+          <div class="compiler-chip-grid">
+            <div class="compiler-chip">
+              <strong>Breaking verdict</strong>
+              <span>decide whether the candidate schema is safe to ship</span>
+            </div>
+            <div class="compiler-chip">
+              <strong>Provider-specific drift</strong>
+              <span>see which targets got riskier and by how much</span>
+            </div>
+            <div class="compiler-chip">
+              <strong>Schema-level risks</strong>
+              <span>catch required-field and shape changes before runtime</span>
+            </div>
+            <div class="compiler-chip">
+              <strong>Shareable report</strong>
+              <span>same diff engine powers the CLI, CI, demo, and paid API</span>
+            </div>
+          </div>
+          <div class="compiler-window">
+            <div class="compiler-window-bar">
+              <span class="compiler-window-dot"></span>
+              <span class="compiler-window-dot"></span>
+              <span class="compiler-window-dot"></span>
+              <span class="compiler-window-label">Regression preview</span>
+            </div>
+            ${renderCodeBlock(previewSnippet)}
+          </div>
+          <p class="meta">
+            Teams do not buy this because schema linting is interesting. They buy it because a
+            broken schema rollout is expensive and diffing the change is faster than debugging the aftermath.
+          </p>
+        </aside>
+      </section>
+      <section class="panel compiler-lab section" id="demo">
+        <div class="compiler-lab-head">
+          <div class="compiler-lab-copy stack">
+            <div class="eyebrow compiler-kicker">Interactive regression demo</div>
+            <h2>Check the schema change before anyone merges it.</h2>
+            <p>
+              This public demo is intentionally limited, but the regression engine is real:
+              baseline plus candidate schemas in, provider-specific drift and a likely-breaking
+              verdict out, no API key required.
+            </p>
+          </div>
+          <div class="compiler-limit-row">
+            <span class="compiler-limit">12 KB request</span>
+            <span class="compiler-limit">6 KB per schema</span>
+            <span class="compiler-limit">No signup</span>
+          </div>
+        </div>
+        <div class="compiler-lab-grid">
+          <form class="compiler-form-shell form-grid" id="demo-diff-form">
+            <div class="compiler-form-head">
+              <div class="compiler-form-title">
+                <span class="eyebrow compiler-kicker">Baseline and candidate</span>
+                <p>Compare the previous schema to the proposed one, then inspect the regression report.</p>
+              </div>
+              <div class="compiler-limit-row">
+                <span class="compiler-limit">Signed result</span>
+                <span class="compiler-limit">Provider-aware</span>
+              </div>
+            </div>
+            <label class="field" for="demo-diff-targets">
+              <span class="field-label">Targets</span>
+              <input class="demo-hidden-input" id="demo-diff-targets" name="targets" value="${escapeHtml(DEMO_DEFAULT_TARGETS.join(","))}" spellcheck="false">
+              <div class="demo-target-picker" role="group" aria-label="Select target providers">
+                <button class="demo-target-toggle is-active" type="button" data-demo-diff-target="openai" aria-pressed="true">OpenAI</button>
+                <button class="demo-target-toggle is-active" type="button" data-demo-diff-target="gemini" aria-pressed="true">Gemini</button>
+                <button class="demo-target-toggle" type="button" data-demo-diff-target="anthropic" aria-pressed="false">Anthropic</button>
+                <button class="demo-target-toggle" type="button" data-demo-diff-target="ollama" aria-pressed="false">Ollama</button>
+              </div>
+            </label>
+            <label class="field" for="demo-diff-baseline">
+              <span class="field-label">Baseline schema JSON</span>
+              <textarea id="demo-diff-baseline" name="baselineSchema" spellcheck="false">${escapeHtml(baselineSchema)}</textarea>
+            </label>
+            <label class="field" for="demo-diff-candidate">
+              <span class="field-label">Candidate schema JSON</span>
+              <textarea id="demo-diff-candidate" name="candidateSchema" spellcheck="false">${escapeHtml(candidateSchema)}</textarea>
+            </label>
+            <div class="compiler-run-row">
+              <button class="primary" id="demo-diff-run" type="submit">Run free regression demo</button>
+              <button class="secondary" id="demo-diff-use-sample" type="button">Use sample change</button>
+              <a class="secondary" href="${escapeHtml(baseUrl)}/pricing">Buy full API</a>
+            </div>
+          </form>
+          <div class="compiler-output-shell">
+            <div class="compiler-output-header">
+              <div class="stack">
+                <div class="eyebrow compiler-kicker">Live output</div>
+                <div class="compiler-output-caption">
+                  The sample run loads automatically so the page immediately shows what the regression report looks like.
+                </div>
+              </div>
+              <p class="meta" data-variant="loading" id="demo-diff-status">Loading a sample regression run...</p>
+            </div>
+            <div class="demo-summary" id="demo-diff-summary"></div>
+            <details class="demo-raw-shell">
+              <summary>Show raw regression bundle</summary>
+              <pre><code id="demo-diff-raw-output"></code></pre>
+            </details>
+            <div class="compiler-output-caption">
+              Paid access unlocks the signed shared endpoints for <code>/v1/diff</code>,
+              <code>/v1/compile</code>, <code>/v1/lint</code>, and <code>/v1/normalize</code>.
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel section">
+        <div class="compiler-lab-head">
+          <div class="compiler-lab-copy stack">
+            <div class="eyebrow compiler-kicker">Why this lands in CI</div>
+            <h2>Regression reports make schema changes reviewable, not just testable.</h2>
+            <p>
+              A portability lint is useful, but a baseline-vs-candidate report is easier for teams
+              to operationalize because it answers the merge question directly: did this change make
+              any target riskier?
+            </p>
+          </div>
+        </div>
+        <div class="compiler-lab-grid">
+          <article class="compiler-note-card">
+            <div class="eyebrow">GitHub Action</div>
+            <p>Use the same regression engine in CI and fail the workflow when a likely breaking schema change appears.</p>
+            ${renderCodeBlock(PUBLIC_CI_SNIPPET)}
+          </article>
+          <article class="compiler-note-card">
+            <div class="eyebrow">Hosted API</div>
+            <p>Once CI or multiple engineers need the same signed report surface, move the same diff to the shared API.</p>
+            ${renderCodeBlock(`curl -X POST ${baseUrl}/v1/diff \\
+  -H 'content-type: application/json' \\
+  -H 'x-api-key: sk_live...' \\
+  -d '{"baselineSchema":{"type":"object","properties":{"city":{"type":"string"}},"required":[],"additionalProperties":false},"candidateSchema":{"type":"object","properties":{"city":{"type":"string"},"temperatureC":{"type":"number"}},"required":["temperatureC"],"additionalProperties":false},"targets":["openai","gemini"]}'`)}
+          </article>
+        </div>
+      </section>
+      ${renderDiffDemoScript(baseUrl)}`
+  });
+}
+
 function renderCiPage(baseUrl: string): string {
   return renderMarketingPage({
     baseUrl,
@@ -2783,6 +3440,7 @@ function renderCiPage(baseUrl: string): string {
           ${renderCodeBlock(PUBLIC_CI_SNIPPET)}
           <div class="actions">
             <a class="primary" href="${escapeHtml(PUBLIC_REPO_URL)}/tree/${escapeHtml(PUBLIC_ACTION_REF)}/.github/actions/portability-check">View action source</a>
+            <a class="secondary" href="${escapeHtml(baseUrl)}/diff#demo">Run regression demo</a>
             <a class="secondary" href="${escapeHtml(baseUrl)}/compiler">See compiler output</a>
           </div>
         </article>
@@ -3565,6 +4223,11 @@ app.get("/compare/:slug", (context) => {
   return context.html(renderComparePage(baseUrl, page));
 });
 
+app.get("/diff", (context) => {
+  const baseUrl = new URL(context.req.url).origin;
+  return context.html(renderDiffPage(baseUrl));
+});
+
 app.get("/compiler", (context) => {
   const baseUrl = new URL(context.req.url).origin;
   return context.html(renderCompilerPage(baseUrl));
@@ -3624,6 +4287,7 @@ Schema Gateway is a developer API for structured output portability across OpenA
 
 Primary pages:
 - Home: ${baseUrl}/
+- Diff: ${baseUrl}/diff
 - Comparisons: ${baseUrl}/compare
 - Compiler: ${baseUrl}/compiler
 - GitHub CI: ${baseUrl}/ci
@@ -3657,6 +4321,7 @@ app.get("/sitemap.xml", (context) => {
   const baseUrl = new URL(context.req.url).origin;
   const routes = [
     "/",
+    "/diff",
     "/compare",
     "/compiler",
     "/ci",

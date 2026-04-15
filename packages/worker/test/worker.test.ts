@@ -173,6 +173,7 @@ describe("worker", () => {
     expect(html).toContain("/openapi.json");
     expect(html).toContain("https://buy.polar.sh/test-checkout");
     expect(html).toContain("founder@example.com");
+    expect(html).toContain("/diff");
     expect(html).toContain("/compare");
     expect(html).toContain("/compiler");
     expect(html).toContain("/ci");
@@ -201,6 +202,14 @@ describe("worker", () => {
     expect(compilerHtml).toContain("Run free demo");
     expect(compilerHtml).toContain("/v1/demo/compile");
 
+    const diffResponse = await app.request("http://example.test/diff", {}, env);
+    expect(diffResponse.status).toBe(200);
+    const diffHtml = await diffResponse.text();
+    expect(diffHtml).toContain("Catch schema regressions before they ship.");
+    expect(diffHtml).toContain("Show raw regression bundle");
+    expect(diffHtml).toContain("Run free regression demo");
+    expect(diffHtml).toContain("/v1/demo/diff");
+
     const claimResponse = await app.request("http://example.test/claim", {}, env);
     expect(claimResponse.status).toBe(200);
     const claimHtml = await claimResponse.text();
@@ -228,6 +237,7 @@ describe("worker", () => {
     expect(sitemapResponse.status).toBe(200);
     const sitemap = await sitemapResponse.text();
     expect(sitemap).toContain("/compare/openai-structured-outputs");
+    expect(sitemap).toContain("/diff");
     expect(sitemap).toContain("/compiler");
     expect(sitemap).toContain("/ci");
     expect(sitemap).toContain("/install");
@@ -237,12 +247,14 @@ describe("worker", () => {
     const llmsResponse = await app.request("http://example.test/llms.txt", {}, env);
     expect(llmsResponse.status).toBe(200);
     const llms = await llmsResponse.text();
+    expect(llms).toContain("Diff:");
     expect(llms).toContain("Provider comparison pages");
     expect(llms).toContain("Compiler:");
     expect(llms).toContain("GitHub CI:");
     expect(llms).toContain("Install:");
     expect(llms).toContain("Claim:");
     expect(llms).toContain("POST /v1/demo/compile");
+    expect(llms).toContain("POST /v1/demo/diff");
     expect(llms).toContain("POST /v1/lint");
 
     const indexNowResponse = await app.request(
